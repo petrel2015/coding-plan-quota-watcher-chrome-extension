@@ -1,0 +1,20 @@
+common.css
+  h_47dbf5e7272ced 292-347
+common.js
+  h_47dbf5e7272ced 1,5-9,25-28,33,35,41,47,68-81,113-310
+dashboard.js
+  h_47dbf5e7272ced 1,7-12
+popup.js
+  h_47dbf5e7272ced 1,7-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5f24f42a6bf5fa93827ca80a0d1a07eabf013435",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

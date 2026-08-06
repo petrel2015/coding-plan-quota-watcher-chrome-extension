@@ -1,0 +1,18 @@
+dashboard.js
+  h_47dbf5e7272ced 114
+popup.js
+  h_47dbf5e7272ced 13,108,129,133,147
+render.js
+  h_47dbf5e7272ced 3-13,221,261,281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "578db1b4fbb4589bddd3092866cf258ee0d0556c",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

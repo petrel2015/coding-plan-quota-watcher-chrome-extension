@@ -1,0 +1,38 @@
+.gitignore
+  h_47dbf5e7272ced 1-13
+background.js
+  h_47dbf5e7272ced 1-567
+dashboard.css
+  h_47dbf5e7272ced 1-341
+dashboard.html
+  h_47dbf5e7272ced 1-22
+dashboard.js
+  h_47dbf5e7272ced 1-207
+manifest.json
+  h_47dbf5e7272ced 1-35
+popup.css
+  h_47dbf5e7272ced 1-251
+popup.html
+  h_47dbf5e7272ced 1-23
+popup.js
+  h_47dbf5e7272ced 1-167
+render.js
+  h_47dbf5e7272ced 1-317
+settings.css
+  h_47dbf5e7272ced 1-231
+settings.html
+  h_47dbf5e7272ced 1-37
+settings.js
+  h_47dbf5e7272ced 1-363
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "63b0232e6f1a3ea33cb7180a69a80b6e57aa7d78",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

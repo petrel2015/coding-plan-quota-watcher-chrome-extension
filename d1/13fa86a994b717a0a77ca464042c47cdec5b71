@@ -1,0 +1,16 @@
+common.css
+  h_47dbf5e7272ced 46-82,166-179,186,282-283
+common.js
+  h_47dbf5e7272ced 35-41,44-46,48-51,70,77,80,99-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d113fa86a994b717a0a77ca464042c47cdec5b71",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

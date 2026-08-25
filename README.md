@@ -24,6 +24,10 @@ A Chrome browser extension (Manifest V3) that **monitors the usage quota of mult
 
 ![Dashboard - Light](docs/dashboard-light.png)
 
+**Cross-window "ghost" effective cap** — when the weekly/monthly window has less quota left than the 5-hour window, the 5h progress bar shows a dashed wall + hatched locked region marking the real usable limit, and the burn-rate prediction is recalculated against it:
+
+![Dashboard - Ghost Cap](docs/dashboard-ghost-cap.png)
+
 **Dashboard (dark theme)**:
 
 ![Dashboard - Dark](docs/dashboard-dark.png)
@@ -47,6 +51,7 @@ A Chrome browser extension (Manifest V3) that **monitors the usage quota of mult
 
 - **Multi-platform aggregation**: view all plan usage in one panel
 - **Progress bars with 3-level warnings**: green (<70%) / yellow (70–90%) / red (≥90%)
+- **Cross-window effective cap ("ghost" HP bar)**: when a weekly/monthly window has less left than the 5-hour window, the 5h bar shows a dashed wall + hatched region marking the real usable limit, and burn-rate prediction is recalculated against that cap (Volcengine Ark & Zhipu GLM; MiniMax/Codex APIs only return percentages, so they are excluded)
 - **Reset countdown**: real-time display of time until each window resets
 - **Burn-rate prediction**: linear extrapolation of current consumption to estimate when quota runs out and whether it beats the reset
 - **3 theme modes**: light / dark / follow system

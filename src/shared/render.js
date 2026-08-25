@@ -4,7 +4,10 @@ import { formatNum, formatDateLabel, formatDuration } from "./format.js";
 import { t } from "./i18n.js";
 
 // 将各数据源的原始 API 返回归一化为统一结构
-// 返回: { planType, windows: [{label, usedPct, detail, resetMs, startMs}], extras: [{label, value}] }
+// 返回: { planType, windows: [{label, usedPct, detail, resetMs, startMs,
+//          used, quota, remaining,        // 绝对量（火山/GLM 有，MiniMax/Codex 只有百分比则无）
+//          capPct, bindingLabel, bindingResetMs, bindingRemaining, capText // 跨窗口有效上限，见 applyWindowCaps
+//        }], extras: [{label, value}] }
 export function normalizeData(type, data) {
   if (type === "volcengine-ark") {
     const result = data.Result;
@@ -51,6 +54,9 @@ export function normalizeData(type, data) {
         windows.push({
           label: w.label,
           usedPct: quota > 0 ? (used / quota) * 100 : 0,
+          used,
+          quota,
+          remaining,
           detail: t("render.detailRemaining", {
             used: formatNum(used),
             quota: formatNum(quota),
@@ -63,7 +69,7 @@ export function normalizeData(type, data) {
     }
     return {
       planType: result.PlanType || null,
-      windows,
+      windows: applyWindowCaps(windows),
       extras: [],
     };
   }
@@ -101,7 +107,7 @@ export function normalizeData(type, data) {
       planType: data._planName
         ? data._planName.replace(/^TokenPlan/i, "").replace(/^-/, "").replace(t("render.minimaxMonthlyFrom"), t("render.minimaxMonthlyTo"))
         : (data.plan_name || data.plan_type || data.subscription_plan || null),
-      windows,
+      windows: applyWindowCaps(windows),
       extras: [],
     };
   }
@@ -160,7 +166,7 @@ export function normalizeData(type, data) {
     }
     return {
       planType: data.plan_type || null,
-      windows,
+      windows: applyWindowCaps(windows),
       extras,
     };
   }
@@ -193,6 +199,9 @@ export function normalizeData(type, data) {
       windows.push({
         label,
         usedPct: pct,
+        used,
+        quota,
+        remaining,
         detail: t("render.detailRemaining", {
           used: formatNum(used),
           quota: formatNum(quota),
@@ -204,12 +213,53 @@ export function normalizeData(type, data) {
     }
     return {
       planType: (data.data && data.data.level) ? `Lv.${data.data.level}` : null,
-      windows,
+      windows: applyWindowCaps(windows),
       extras: [],
     };
   }
 
   return null;
+}
+
+// 跨窗口有效上限（「真实血量 vs 虚血量」）：
+// 同一数据源的多个窗口对同一消耗流计数，任意时刻真正的墙是剩余绝对量最小的窗口。
+// 对窗口 X，若其他窗口剩余更少，X 名义上 100% 的额度实际只能用到
+// capPct = (X.used + minRem) / X.quota × 100，binding* 指向约束来源窗口。
+// 只有带绝对量（used/quota）的窗口参与比较；MiniMax / Codex 只返回百分比，
+// 不同分母的百分比无法换算绝对剩余，故不参与（也不受约束）。
+export function applyWindowCaps(windows) {
+  const list = windows || [];
+  const measurable = list.filter(
+    (w) => Number.isFinite(w.quota) && w.quota > 0 && Number.isFinite(w.used)
+  );
+  if (measurable.length < 2) return list;
+  return list.map((w) => {
+    if (!measurable.includes(w)) return w;
+    let minRem = Infinity;
+    let binding = null;
+    for (const other of measurable) {
+      if (other === w) continue;
+      const rem = Math.max(0, other.quota - other.used);
+      if (rem < minRem) {
+        minRem = rem;
+        binding = other;
+      }
+    }
+    if (!binding) return w;
+    const ownRem = Math.max(0, w.quota - w.used);
+    // 本窗口剩余就是最少的（或并列）→ 自己的 100% 就是真实上限，无附加约束
+    if (minRem >= ownRem) return w;
+    // capPct 不小于 usedPct：血条上标记线不会落在当前进度之后
+    const capPct = Math.min(100, Math.max(w.usedPct || 0, ((w.used + minRem) / w.quota) * 100));
+    return {
+      ...w,
+      capPct,
+      bindingLabel: binding.label,
+      bindingResetMs: binding.resetMs || 0,
+      bindingRemaining: minRem,
+      capText: t("render.capLine", { win: binding.label, remaining: formatNum(minRem) }),
+    };
+  });
 }
 
 // 计算单个窗口的消耗速度预测文本（null 表示无预测）
@@ -224,8 +274,31 @@ export function computeForecast(win) {
   const totalMs = win.resetMs - win.startMs;
   if (elapsedMs <= 60000 || totalMs <= 0) return null;
   // 按当前消耗速度，剩余额度能撑多久
-  const remainingPct = 100 - pct;
   const consumeRatePerMs = pct / elapsedMs;
+
+  // 跨窗口约束优先：名义 100% 之前会先撞上别的窗口的墙（虚上限），
+  // 预测终点从 100% 换成 capPct；若约束窗口在撞墙前自己先重置，约束失效
+  if (win.capPct != null && win.capPct < 100 && win.bindingLabel) {
+    const capHitMs = now + (win.capPct - pct) / consumeRatePerMs;
+    const capLiftedBeforeHit = win.bindingResetMs > 0 && capHitMs >= win.bindingResetMs;
+    if (!capLiftedBeforeHit) {
+      if (capHitMs - now < 60000) {
+        return { text: t("render.fcBlocked", { win: win.bindingLabel }), level: "warn" };
+      }
+      if (capHitMs < win.resetMs) {
+        return {
+          text: t("render.fcCapHit", {
+            date: formatDateLabel(new Date(capHitMs)),
+            win: win.bindingLabel,
+          }),
+          level: "warn",
+        };
+      }
+      return { text: t("render.fcOk"), level: "ok" };
+    }
+  }
+
+  const remainingPct = 100 - pct;
   const expectLastMs = remainingPct / consumeRatePerMs;
   const expectEndMs = now + expectLastMs;
   const expectStr = formatDateLabel(new Date(expectEndMs));

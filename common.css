@@ -52,6 +52,10 @@
   /* 进度条 */
   --progress-height: 6px;
   --progress-track: #e2e8f0;
+
+  /* 幽灵上限（跨窗口约束的血条标记：虚线墙 + 斜纹锁定区） */
+  --cap-line: #475569;
+  --cap-hatch: rgba(71, 85, 105, 0.22);
 }
 
 /* ---------- 深色模式 ----------
@@ -100,6 +104,9 @@
   --shadow-pop: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
 
   --progress-track: #334155;
+
+  --cap-line: #cbd5e1;
+  --cap-hatch: rgba(203, 213, 225, 0.18);
 }
 
 /* auto 模式：跟随系统（仅当未显式指定 light/dark 时生效） */
@@ -142,6 +149,9 @@
     --shadow-pop: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
 
     --progress-track: #334155;
+
+    --cap-line: #cbd5e1;
+    --cap-hatch: rgba(203, 213, 225, 0.18);
   }
 
   :root:not([data-theme="light"]):not([data-theme="dark"]) .toggle-slider {
@@ -398,6 +408,7 @@ body {
 
 /* 进度条 — 更细，圆角端点，轨道与填充对比清晰 */
 .progress-bar {
+  position: relative;
   height: var(--progress-height);
   background: var(--progress-track);
   border-radius: var(--radius-pill);
@@ -413,6 +424,26 @@ body {
 .bar-ok { background: var(--color-ok); }
 .bar-warn { background: var(--color-warn); }
 .bar-danger { background: var(--color-danger); }
+
+/* 幽灵上限：名义上属于本窗口、实际被其他窗口锁死的区间（斜纹），左缘虚线是那堵“墙”。
+   left 由组件按 capPct 内联设置；capPct 与当前进度重合时只剩虚线墙（已撞上）。 */
+.cap-ghost {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background: repeating-linear-gradient(135deg, var(--cap-hatch) 0 2px, transparent 2px 5px);
+  border-left: 2px dashed var(--cap-line);
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+}
+
+/* 幽灵上限说明行：受哪个窗口限制、实际还能用多少 */
+.window-capnote {
+  font-size: 11px;
+  color: var(--color-warn);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+}
 
 .window-detail {
   font-size: 11px;

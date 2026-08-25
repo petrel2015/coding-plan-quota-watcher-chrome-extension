@@ -37,7 +37,9 @@
         <div v-if="diag && diag.detail" class="diag-detail">{{ diag.detail }}</div>
         <div v-if="diag && diag.advice" class="diag-advice">{{ diag.advice }}</div>
       </div>
-      <div v-if="normalized" class="card-body" v-html="windowsHtml"></div>
+      <div v-if="normalized" class="card-body">
+        <WindowList :windows="normalized.windows" :now="now" />
+      </div>
       <div v-else class="error-msg">{{ t('card.formatError') }}</div>
     </template>
     <template v-else-if="data._error && !data._hasValidData">
@@ -49,22 +51,7 @@
     </template>
     <template v-else>
       <div v-if="normalized" class="card-body">
-        <div v-for="(win, i) in normalized.windows" :key="i" class="window">
-          <div class="window-header">
-            <span class="window-label">{{ win.label }}</span>
-            <span class="window-used">{{ (win.usedPct || 0).toFixed(1) }}%</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" :class="barClass(win.usedPct)" :style="{ width: Math.min(win.usedPct || 0, 100) + '%' }"></div>
-          </div>
-          <div v-if="win.detail" class="window-detail">{{ win.detail }}</div>
-          <div v-if="forecast(win)" class="window-forecast" :class="'forecast-' + forecast(win).level">
-            {{ forecast(win).text }}
-          </div>
-          <div class="window-footer">
-            <span class="reset-time" :class="{ 'reset-done': isReset(win) }">{{ resetText(win) }}</span>
-          </div>
-        </div>
+        <WindowList :windows="normalized.windows" :now="now" />
         <div v-for="(ex, i) in normalizedExtras" :key="'ex' + i" class="window-detail">{{ ex.label }}: {{ ex.value }}</div>
       </div>
       <div v-else class="error-msg">{{ t('card.formatError') }}</div>
@@ -76,13 +63,15 @@
 </template>
 
 <script>
-import { normalizeData, computeForecast } from "../shared/render.js";
-import { formatRelativeTime, formatCountdown, escapeHtml } from "../shared/format.js";
+import WindowList from "./WindowList.vue";
+import { normalizeData } from "../shared/render.js";
+import { formatRelativeTime } from "../shared/format.js";
 import { diagnoseError } from "../shared/diagnose.js";
 import { t } from "../shared/i18n.js";
 
 export default {
   name: "SourceCard",
+  components: { WindowList },
   props: {
     inst: { type: Object, required: true },
     data: { type: Object, default: null },
@@ -122,24 +111,6 @@ export default {
   },
   methods: {
     t,
-    barClass(pct) {
-      pct = pct || 0;
-      if (pct >= 90) return "bar-danger";
-      if (pct >= 70) return "bar-warn";
-      return "bar-ok";
-    },
-    forecast(win) {
-      return computeForecast(win);
-    },
-    isReset(win) {
-      return win.resetMs - this.now <= 0;
-    },
-    resetText(win) {
-      if (!win.resetMs) return "\u00a0";
-      const resetInMs = win.resetMs - this.now;
-      if (resetInMs <= 0) return t("card.reset");
-      return t("card.countdown", { time: formatCountdown(resetInMs) });
-    },
   },
 };
 </script>
@@ -235,80 +206,12 @@ export default {
 .card-body {
   /* 占位 */
 }
-.window {
-  margin-bottom: 14px;
-}
-.window:last-child {
-  margin-bottom: 0;
-}
-.window-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 6px;
-}
-.window-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
-.window-used {
-  font-size: 13px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-}
-.progress-bar {
-  height: 6px;
-  background: var(--progress-track);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-  margin-bottom: 6px;
-}
-.progress-fill {
-  height: 100%;
-  border-radius: var(--radius-pill);
-}
-.bar-ok { background: var(--color-ok); }
-.bar-warn { background: var(--color-warn); }
-.bar-danger { background: var(--color-danger); }
+/* extras 行（credits 等）沿用窗口明细的排版 */
 .window-detail {
   font-size: 11px;
   color: var(--color-text-faint);
   font-variant-numeric: tabular-nums;
   margin-bottom: 4px;
-}
-.window-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11.5px;
-  color: var(--color-text-tertiary);
-}
-.reset-time {
-  font-variant-numeric: tabular-nums;
-}
-.reset-done {
-  color: var(--color-ok);
-}
-.window-forecast {
-  font-size: 11px;
-  margin-bottom: 5px;
-  padding: 4px 8px 4px 10px;
-  border-radius: var(--radius-btn);
-  font-variant-numeric: tabular-nums;
-  border: 1px solid;
-  border-left-width: 2px;
-}
-.forecast-ok {
-  color: var(--color-ok);
-  background: var(--color-ok-bg);
-  border-color: var(--color-ok-border);
-}
-.forecast-warn {
-  color: var(--color-danger);
-  background: var(--color-danger-bg);
-  border-color: var(--color-danger-border);
 }
 .fetched-at {
   margin-top: 10px;

@@ -1,0 +1,18 @@
+README.md
+  h_47dbf5e7272ced 19-34
+README.zh-CN.md
+  h_47dbf5e7272ced 19-34
+manifest.json
+  h_47dbf5e7272ced 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a20e5f5392a17bcf2630d94ff4c225ba231d807d",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

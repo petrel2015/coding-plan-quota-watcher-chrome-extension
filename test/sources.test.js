@@ -1,6 +1,11 @@
-// sources.test.js - migrateInstances / generateInstanceName 测试
+// sources.test.js - migrateInstances / generateInstanceName / getRefreshIntervalMin 测试
 import { describe, it, expect } from "vitest";
-import { migrateInstances, generateInstanceName } from "../src/shared/sources.js";
+import {
+  migrateInstances,
+  generateInstanceName,
+  getRefreshIntervalMin,
+  DEFAULT_REFRESH_INTERVAL_MIN,
+} from "../src/shared/sources.js";
 
 describe("migrateInstances", () => {
   it("把 manualCookie 迁移到 manualCurl", () => {
@@ -52,6 +57,25 @@ describe("migrateInstances", () => {
     expect(instances[1].manualCurl).toBe("migrate-me");
     expect(instances[1].manualCookie).toBeUndefined();
     expect(instances[2].manualCurl).toBeUndefined();
+  });
+});
+
+describe("getRefreshIntervalMin", () => {
+  it("缺省字段返回默认 5 分钟", () => {
+    expect(getRefreshIntervalMin({})).toBe(DEFAULT_REFRESH_INTERVAL_MIN);
+    expect(getRefreshIntervalMin(null)).toBe(DEFAULT_REFRESH_INTERVAL_MIN);
+  });
+
+  it("非法值回退默认", () => {
+    expect(getRefreshIntervalMin({ refreshIntervalMin: 0 })).toBe(DEFAULT_REFRESH_INTERVAL_MIN);
+    expect(getRefreshIntervalMin({ refreshIntervalMin: -3 })).toBe(DEFAULT_REFRESH_INTERVAL_MIN);
+    expect(getRefreshIntervalMin({ refreshIntervalMin: "abc" })).toBe(DEFAULT_REFRESH_INTERVAL_MIN);
+  });
+
+  it("合法数字（含数字字符串）透传", () => {
+    expect(getRefreshIntervalMin({ refreshIntervalMin: 1 })).toBe(1);
+    expect(getRefreshIntervalMin({ refreshIntervalMin: 30 })).toBe(30);
+    expect(getRefreshIntervalMin({ refreshIntervalMin: "10" })).toBe(10);
   });
 });
 

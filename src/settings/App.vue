@@ -82,6 +82,7 @@ import InstanceCard from "./InstanceCard.vue";
 import {
   SOURCE_TEMPLATES,
   DEFAULT_INSTANCES,
+  DEFAULT_REFRESH_INTERVAL_MIN,
   migrateInstances,
   generateInstanceName,
 } from "../shared/sources.js";
@@ -262,6 +263,7 @@ export default {
         authMode: "local",
         manualCurl: "",
         nameCustomized: false,
+        refreshIntervalMin: DEFAULT_REFRESH_INTERVAL_MIN,
       };
       // 加到最上面，避免新增后还要滚动到底部编辑
       this.instances.unshift(newInst);

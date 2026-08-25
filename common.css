@@ -538,8 +538,11 @@ body {
 }
 
 /* ---------- loading 态 ---------- */
+/* overflow: hidden 裁剪滑动条：动画终点 left:100% 时条右端伸到卡片外 30%，
+   不裁剪会 visibly 超出卡片（含圆角外） */
 .card-loading {
   position: relative;
+  overflow: hidden;
   opacity: 0.7;
   transition: opacity 0.2s;
 }

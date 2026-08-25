@@ -108,6 +108,17 @@ export const SOURCE_TEMPLATES = {
 // 类型顺序（settings 下拉 / 默认配置用）
 export const SOURCE_ORDER = ["volcengine-ark", "minimax", "chatgpt-codex", "zhipu-glm"];
 
+// 每卡片自动刷新间隔（分钟）：默认值 + 设置页可选项
+export const DEFAULT_REFRESH_INTERVAL_MIN = 5;
+export const REFRESH_INTERVAL_OPTIONS = [1, 2, 3, 5, 10, 15, 30, 60];
+
+// 读取实例的刷新间隔：非法 / 缺省回退默认 5 分钟（老配置无此字段）
+export function getRefreshIntervalMin(inst) {
+  const n = Number(inst && inst.refreshIntervalMin);
+  if (Number.isFinite(n) && n >= 1) return n;
+  return DEFAULT_REFRESH_INTERVAL_MIN;
+}
+
 // 数据源展示名（翻译 name key）；未知类型回退到 "coding plan"
 export function getSourceName(type) {
   const tmpl = SOURCE_TEMPLATES[type];

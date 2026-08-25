@@ -13,7 +13,7 @@ export default {
   // —— dashboard/SourceCard.vue ——
   "card.refresh": "Refresh",
   "card.refreshing": "Refreshing",
-  "card.timeout": "Refresh timed out (>30s)",
+  "card.timeout": "Refresh timed out (>60s)",
   "card.retry": "Retry",
   "card.slow": "Refresh is slow…",
   "card.noData": "No data yet. Click refresh.",
@@ -23,6 +23,8 @@ export default {
   "card.showLast": "Fetch failed, showing last data",
   "card.reset": "Reset",
   "card.countdown": "Resets in {time}",
+  "card.nextRefresh": "Next refresh in {time}",
+  "card.nextRefreshSoon": "Refreshing soon",
 
   // —— settings/App.vue ——
   "settings.title": "Settings",
@@ -45,6 +47,7 @@ export default {
   "settings.deleteConfirm": "Delete \"{name}\"?",
   "settings.unknownSource": "Unknown source",
   "settings.checkFailed": "Check failed: {msg}",
+  "settings.intervalMinutes": "{n} min",
   "settings.testMissingCurlTitle": "Missing cURL",
   "settings.testMissingCurlDetail": "Manual mode requires a cURL to test.",
   "settings.testMissingCurlAdvice": "Copy from DevTools → Network → Copy as cURL and paste it above.",
@@ -54,6 +57,7 @@ export default {
   // —— settings/InstanceCard.vue ——
   "instance.delete": "Delete",
   "instance.type": "Type",
+  "instance.refreshInterval": "Auto refresh",
   "instance.name": "Name",
   "instance.auth": "Auth",
   "instance.authLocal": "Local Cookie (auto)",

@@ -22,6 +22,7 @@
         :loading="refreshingIds.has(inst.id)"
         :retryable="retryableIds.has(inst.id)"
         :timed-out="timedOutIds.has(inst.id)"
+        :auto-refresh-off="isTerminalAuthError(inst)"
         :now="now"
         @refresh-one="refreshOne"
         @retry="retry"
@@ -35,7 +36,7 @@
 
 <script>
 import SourceCard from "./SourceCard.vue";
-import { migrateInstances } from "../shared/sources.js";
+import { migrateInstances, getRefreshIntervalMin } from "../shared/sources.js";
 import { applyTheme, setThemeAttr } from "../shared/theme.js";
 import { diagnoseError, isTerminalAuthDiag } from "../shared/diagnose.js";
 import { t, getLocale } from "../shared/i18n.js";
@@ -44,11 +45,23 @@ import { t, getLocale } from "../shared/i18n.js";
 const MIN_LOADING_MS = 500;
 // 转圈超过该时长（5s）后，卡片显示「点击重试」链接（仍在转圈，可提前触发重试）
 const RETRY_SHOW_MS = 5000;
-// 转圈超过该时长（30s）判定超时失败：停止转圈并提示失败
-const LOADING_FALLBACK_TIMEOUT_MS = 30000;
-// 打开页面时的自动刷新门槛：数据缓存在该时长内（与后台 alarm 的 5 分钟
-// 刷新周期一致）就不刷，频繁开关页面不再反复转圈；手动「全部刷新」不受影响
-const AUTO_REFRESH_STALE_MS = 5 * 60 * 1000;
+// 转圈超过该时长（60s）判定超时失败：停止转圈并提示失败。须大于单卡最坏
+// 合法耗时——多请求数据源每段请求各受 20s/10s 超时保护，chatgpt-codex
+// 三段（token + usage + forecast）最长 50s，全部成功也可能超过 30s
+const LOADING_FALLBACK_TIMEOUT_MS = 60000;
+
+// 发送刷新消息：MV3 下 SW 冷启动竞态 / SW 中途被杀会断开消息通道
+// （"Receiving end does not exist" / "message port closed"），此时刷新
+// 并未发生。等 1s 让 SW 完成启动后重试一次
+async function sendRefreshMessage(msg) {
+  try {
+    return await chrome.runtime.sendMessage(msg);
+  } catch (e) {
+    console.error("[QuotaWatcher] sendMessage failed, retrying once:", e);
+    await new Promise((r) => setTimeout(r, 1000));
+    return chrome.runtime.sendMessage(msg);
+  }
+}
 
 export default {
   name: "DashboardApp",
@@ -77,6 +90,7 @@ export default {
     this.tickTimer = null;
     this.retryTimers = {}; // { [instanceId]: timer }，5s 显示重试链接
     this.fallbackTimers = {}; // { [instanceId]: timer }，30s 超时失败
+    this.autoTimers = {}; // { [instanceId]: timer }，每卡片到点自动刷新
   },
   computed: {
     enabledInstances() {
@@ -94,15 +108,22 @@ export default {
   async mounted() {
     document.title = t("doc.dashboardTitle");
     document.documentElement.lang = getLocale();
+    // 查询一次后台状态打到页面 console：SW 版本 / 存活时长 / 是否有刷新轮
+    // 卡死（refreshing 长时间 true），排查「转圈到超时」时直接可看
+    chrome.runtime.sendMessage({ action: "diag" })
+      .then((d) => console.log("[QuotaWatcher] background diag:", d))
+      .catch((e) => console.error("[QuotaWatcher] background diag failed:", e));
     await applyTheme();
     await this.loadAll();
     // 监听 storage 变化
     chrome.storage.onChanged.addListener(this.onStorageChanged);
-    // 每 15 秒刷新相对时间（now 变化触发倒计时重算）
+    // 每秒刷新相对时间与「距下次刷新」倒计时（now 变化触发卡片重算，一直动）
     this.tickTimer = setInterval(() => {
       this.now = Date.now();
-    }, 15000);
-    // 进入 dashboard：数据过期（任一启用卡片缺数据或缓存 ≥5 分钟）才自动刷新，
+    }, 1000);
+    // 按各卡片自己的刷新间隔排定到点自动刷新（默认 5 分钟）
+    this.scheduleAutoRefresh();
+    // 进入 dashboard：数据过期（任一启用卡片缺数据或距上次尝试超过其间隔）才自动刷新，
     // 从 settings 改完配置回来若数据仍新鲜则直接展示缓存，不闪进度条。
     // 自动刷新跳过已知登录失效的卡片，避免无意义的进度条闪烁
     if (this.isDataStale()) this.refreshAll(true);
@@ -110,7 +131,7 @@ export default {
   beforeDestroy() {
     chrome.storage.onChanged.removeListener(this.onStorageChanged);
     if (this.tickTimer) clearInterval(this.tickTimer);
-    for (const map of [this.retryTimers, this.fallbackTimers]) {
+    for (const map of [this.retryTimers, this.fallbackTimers, this.autoTimers]) {
       for (const id of Object.keys(map)) clearTimeout(map[id]);
     }
   },
@@ -164,7 +185,7 @@ export default {
         }
       }
       if (needReloadInstances || needReloadCols) {
-        this.loadAll();
+        this.loadAll().then(() => this.scheduleAutoRefresh());
       }
       if (needReloadTheme) {
         applyTheme();
@@ -177,6 +198,8 @@ export default {
           this.markDone(id);
         }
         this.dataMap = newDataMap;
+        // 新数据落库（_attemptedAt 推进）→ 按新基准重排各卡到点刷新
+        this.scheduleAutoRefresh();
       }
     },
     // 标记某实例开始刷新（记录开始时间，用于 500ms 最小展示）
@@ -252,14 +275,15 @@ export default {
         setTimeout(clear, MIN_LOADING_MS - elapsed);
       }
     },
-    // 数据是否过期：任一启用卡片缺数据或缓存超过 5 分钟即视为过期。
-    // 后台各实例同批刷新、stamp 同步推进；新添加的卡片 stamp=0 会触发补刷
+    // 数据是否过期：任一启用卡片缺数据，或距上次刷新尝试超过其刷新间隔即视为过期。
+    // 后台同批刷新时 stamp 同步推进；新添加的卡片 stamp=0 会触发补刷
     isDataStale() {
-      const stamps = this.enabledInstances.map(
-        (inst) => (this.dataMap[inst.id] && this.dataMap[inst.id]._fetchedAt) || 0,
-      );
-      const oldest = stamps.length ? Math.min(...stamps) : 0;
-      return Date.now() - oldest >= AUTO_REFRESH_STALE_MS;
+      const now = Date.now();
+      return this.enabledInstances.some((inst) => {
+        const data = this.dataMap[inst.id];
+        const last = (data && (data._attemptedAt || data._fetchedAt)) || 0;
+        return now - last >= getRefreshIntervalMin(inst) * 60000;
+      });
     },
     // 该实例最近一次失败是否为「需要用户重新登录/补齐凭证」的终态错误：
     // 这类错误重试不会自愈，自动刷新时不应再触发转圈（避免无意义的进度条闪烁）
@@ -271,6 +295,35 @@ export default {
       const diag = data._diag || diagnoseError(err, { type: inst.type, authMode: inst.authMode });
       return isTerminalAuthDiag(diag);
     },
+    // 按各卡片刷新间隔排定「到点自动刷新」：下次刷新 = 上次尝试（_attemptedAt，
+    // 老缓存回退 _fetchedAt）+ 间隔，与卡片上显示的倒计时、后台到期检查同公式。
+    // 页面打开时由此精确到秒触发；页面关闭后由后台 alarm（1 分钟粒度）兜底
+    scheduleAutoRefresh() {
+      for (const id of Object.keys(this.autoTimers)) {
+        clearTimeout(this.autoTimers[id]);
+        delete this.autoTimers[id];
+      }
+      const now = Date.now();
+      for (const inst of this.enabledInstances) {
+        const data = this.dataMap[inst.id];
+        const last = data && (data._attemptedAt || data._fetchedAt);
+        // 无数据/登录终态失效的卡不排（前者由 isDataStale 补刷，后者不闪转圈）
+        if (!last || this.isTerminalAuthError(inst)) continue;
+        const delay = last + getRefreshIntervalMin(inst) * 60000 - now;
+        this.autoTimers[inst.id] = setTimeout(
+          () => this.autoRefreshOne(inst.id),
+          Math.max(delay, 0),
+        );
+      }
+    },
+    // 到点自动刷新单卡；已在转圈（手动/全部刷新）则跳过，等数据落库后重排
+    async autoRefreshOne(id) {
+      delete this.autoTimers[id];
+      if (this.refreshingIds.has(id)) return;
+      const inst = this.enabledInstances.find((i) => i.id === id);
+      if (!inst || this.isTerminalAuthError(inst)) return;
+      await this.refreshOne(id);
+    },
     async refreshAll(skipTerminal = false) {
       // 防重入：已有任何卡在转时不重复触发
       if (this.refreshingIds.size > 0) return;
@@ -281,34 +334,40 @@ export default {
         targets = targets.filter((inst) => !this.isTerminalAuthError(inst));
       }
       // 所有 enabled 卡片各自进入独立 loading（蒙层）；逐张完成时由
-      // onStorageChanged → markDone 逐张停，不再等整个 sendMessage resolve。
+      // onStorageChanged → markDone 逐张停。sendMessage settle 后（成功 =
+      // 后台整轮已写库；重试后仍失败 = 刷新不会再来）统一停一次，
+      // 避免个别 onChanged 未触达或通道断开时卡片空转到兜底超时
       for (const inst of targets) {
         this.markRefreshing(inst.id);
       }
       try {
-        await chrome.runtime.sendMessage({ action: "refresh" });
+        await sendRefreshMessage({ action: "refresh" });
       } catch (e) {
         console.error("[QuotaWatcher] refreshAll failed:", e);
-        // 发送失败：兜底超时会清，这里不立即清，避免数据其实已更新的误清
       }
+      for (const inst of targets) this.markDone(inst.id);
     },
     async refreshOne(instanceId) {
       if (this.refreshingIds.has(instanceId)) return;
       this.markRefreshing(instanceId);
       try {
-        await chrome.runtime.sendMessage({ action: "refreshOne", instanceId });
+        // resolve 即后台 refreshOne 完成并写库（成功或失败都会写 data_*），
+        // reject（重试后仍失败）说明刷新不会发生：两者都立即停转圈
+        await sendRefreshMessage({ action: "refreshOne", instanceId });
       } catch (e) {
         console.error("[QuotaWatcher] refreshOne failed:", e);
       }
+      this.markDone(instanceId);
     },
     // 转圈≥5s 时点击「重试」：即使还在转圈也强制重新触发刷新，并重置计时
     async retry(instanceId) {
       this.markRefreshing(instanceId);
       try {
-        await chrome.runtime.sendMessage({ action: "refreshOne", instanceId });
+        await sendRefreshMessage({ action: "refreshOne", instanceId });
       } catch (e) {
         console.error("[QuotaWatcher] retry failed:", e);
       }
+      this.markDone(instanceId);
     },
     goSettings() {
       window.location.href = "settings.html";

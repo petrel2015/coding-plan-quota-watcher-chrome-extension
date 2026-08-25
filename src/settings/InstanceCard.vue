@@ -98,6 +98,19 @@
       </div>
     </div>
 
+    <!-- 自动刷新间隔（每卡片独立；dashboard 按此显示下次刷新倒计时并到点触发） -->
+    <div class="field-row">
+      <span class="field-label">{{ t('instance.refreshInterval') }}</span>
+      <el-select v-model="localRefreshInterval" @change="onFieldChange" style="width:160px;">
+        <el-option
+          v-for="n in refreshIntervalOptions"
+          :key="n"
+          :label="t('settings.intervalMinutes', { n })"
+          :value="n"
+        />
+      </el-select>
+    </div>
+
     <!-- 测试连接：真实请求一次，验证鉴权/网络是否可用 -->
     <div class="field-row test-row">
       <span class="field-label">{{ t('instance.verify') }}</span>
@@ -118,7 +131,7 @@
 </template>
 
 <script>
-import { SOURCE_TEMPLATES, generateInstanceName } from "../shared/sources.js";
+import { SOURCE_TEMPLATES, generateInstanceName, getRefreshIntervalMin, REFRESH_INTERVAL_OPTIONS } from "../shared/sources.js";
 import { t } from "../shared/i18n.js";
 
 export default {
@@ -134,6 +147,7 @@ export default {
   data() {
     return {
       templates: SOURCE_TEMPLATES,
+      refreshIntervalOptions: REFRESH_INTERVAL_OPTIONS,
       // 本地编辑态（避免直接改 prop，blur 时再同步）
       localEnabled: this.inst.enabled,
       localName: this.inst.name,
@@ -144,6 +158,8 @@ export default {
       localAuthMode: this.inst.authMode || "manual",
       // 用户是否手动改过名：false=名字跟随类型自动生成，true=类型变化时保持不动
       localNameCustomized: this.inst.nameCustomized === true,
+      // 自动刷新间隔（分钟），缺省/非法回退 5
+      localRefreshInterval: getRefreshIntervalMin(this.inst),
     };
   },
   computed: {
@@ -219,6 +235,7 @@ export default {
         this.localCurl2 = newVal.manualCurl2 || "";
         this.localAuthMode = newVal.authMode || "manual";
         this.localNameCustomized = newVal.nameCustomized === true;
+        this.localRefreshInterval = getRefreshIntervalMin(newVal);
       },
       deep: true,
     },
@@ -240,6 +257,7 @@ export default {
         manualCurl: this.localCurl,
         manualCurl2: this.localCurl2,
         nameCustomized: this.localNameCustomized,
+        refreshIntervalMin: this.localRefreshInterval,
       };
     },
     onFieldChange() {

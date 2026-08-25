@@ -8,6 +8,7 @@
       </div>
       <div class="card-controls">
         <span v-if="data && data._fetchedAt" class="card-refreshed-at">{{ refreshedText }}</span>
+        <span v-if="!loading && !timedOut && nextRefreshText" class="card-next-refresh">{{ nextRefreshText }}</span>
         <el-button
           size="mini"
           class="card-refresh-btn"
@@ -67,6 +68,7 @@ import WindowList from "./WindowList.vue";
 import { normalizeData } from "../shared/render.js";
 import { formatRelativeTime } from "../shared/format.js";
 import { diagnoseError } from "../shared/diagnose.js";
+import { getRefreshIntervalMin } from "../shared/sources.js";
 import { t } from "../shared/i18n.js";
 
 export default {
@@ -78,6 +80,7 @@ export default {
     loading: { type: Boolean, default: false },
     retryable: { type: Boolean, default: false }, // 转圈≥5s，显示「点击重试」链接
     timedOut: { type: Boolean, default: false }, // 转圈≥30s，判定超时失败
+    autoRefreshOff: { type: Boolean, default: false }, // 登录终态失效等不自动刷新的卡，不显示下次刷新倒计时
     now: { type: Number, default: () => Date.now() }, // 用于倒计时刷新
   },
   computed: {
@@ -106,7 +109,25 @@ export default {
     },
     refreshedText() {
       if (!this.data || !this.data._fetchedAt) return "";
-      return formatRelativeTime(this.data._fetchedAt);
+      // 传入响应式 now，让「刚刚/X 分钟前」随每秒 tick 重算（否则 computed 缓存不更新）
+      return formatRelativeTime(this.data._fetchedAt, this.now);
+    },
+    // 下次自动刷新时刻 = 上次刷新尝试 + 该卡刷新间隔（与 App 的到点定时器、
+    // 后台到期检查同一公式）。依赖 now，倒计时每秒重算
+    nextRefreshAt() {
+      if (!this.data) return 0;
+      const last = this.data._attemptedAt || this.data._fetchedAt;
+      return last ? last + getRefreshIntervalMin(this.inst) * 60000 : 0;
+    },
+    nextRefreshText() {
+      if (!this.nextRefreshAt || this.autoRefreshOff) return "";
+      const ms = this.nextRefreshAt - this.now;
+      if (ms <= 0) return t("card.nextRefreshSoon");
+      const totalSec = Math.ceil(ms / 1000);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      const dur = m > 0 ? t("format.ms", { m, s }) : t("format.s", { s });
+      return t("card.nextRefresh", { time: dur });
     },
   },
   methods: {
@@ -202,6 +223,13 @@ export default {
   font-variant-numeric: tabular-nums;
   min-width: 48px;
   text-align: right;
+}
+/* 距下次刷新倒计时：tabular-nums 防止秒数跳动时数字抖动 */
+.card-next-refresh {
+  font-size: 11px;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .card-body {
   /* 占位 */

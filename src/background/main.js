@@ -2,12 +2,20 @@
 // 从 storage 读取实例配置，动态拉取数据，缓存到 storage
 // 数据源模板从 shared/sources.js 引入（单一来源，与 Vue 组件共用）
 
-import { SOURCE_TEMPLATES, DEFAULT_INSTANCES, migrateInstances } from "../shared/sources.js";
+import { SOURCE_TEMPLATES, DEFAULT_INSTANCES, migrateInstances, getRefreshIntervalMin } from "../shared/sources.js";
 import { diagnoseError } from "../shared/diagnose.js";
 import { setLocale, SUPPORTED_LOCALES } from "../shared/i18n.js";
 
+// SW 每次冷启动都打一行：在 SW 控制台里既是「新代码已生效」的标记，
+// 也方便观察 SW 是否被频繁杀死（每次杀死重启都会多一行）
+const _swStartedAt = Date.now();
+console.log(`[QuotaWatcher] service worker started (v${chrome.runtime.getManifest().version})`);
+
 const ALARM_NAME = "quota-refresh";
-const REFRESH_INTERVAL_MINUTES = 5;
+// alarm 检查粒度：每分钟核对一次各卡片是否到期（每卡片有自己的刷新间隔，
+// 默认 5 分钟，见 sources.js 的 refreshIntervalMin）。dashboard 打开时由页面
+// 精确到秒触发，这里只做页面关闭时的兜底，1 分钟粒度足够。
+const ALARM_CHECK_INTERVAL_MINUTES = 1;
 // 单次请求超时：覆盖发起到响应体读取完成的全程，
 // 防止某请求挂起导致刷新链卡死、卡片永远转圈
 const FETCH_TIMEOUT_MS = 20000;
@@ -44,13 +52,21 @@ function allocRuleId() {
  * 带整体超时的 fetch：从发起到响应体读取完成全程受控。
  * 只保护到响应头是不够的——服务器发出头部后挂起 body 时，
  * resp.json()/resp.text() 会永久 pending，卡死整条刷新链。
- * 返回 Response 的薄包装（ok/status 同名，json()/text() 读取完成才停表）。
+ * body 读取不依赖 abort 传播：个别 Chrome 版本里对已收到响应头的请求
+ * abort 后，body 读取的 promise 并不会 reject，因此用同一个超时
+ * promise 与读取 race，到点必 rejects
  */
 async function fetchWithTimeout(url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   let timedOut = false;
+  let timeoutReject;
+  const timeoutPromise = new Promise((_, reject) => { timeoutReject = reject; });
+  // 预挂 catch：超时发生在无人 race 的间隙（如 headers 已回、json() 还没被
+  // 调用）时不产生 unhandled rejection
+  timeoutPromise.catch(() => {});
   const timer = setTimeout(() => {
     timedOut = true;
+    timeoutReject(new Error(`Request timeout (${timeoutMs / 1000}s)`));
     controller.abort();
   }, timeoutMs);
   const asTimeoutError = (e) =>
@@ -60,14 +76,14 @@ async function fetchWithTimeout(url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) {
 
   let resp;
   try {
-    resp = await fetch(url, { ...opts, cache: "no-store", signal: controller.signal });
+    resp = await Promise.race([fetch(url, { ...opts, cache: "no-store", signal: controller.signal }), timeoutPromise]);
   } catch (e) {
     clearTimeout(timer);
     throw asTimeoutError(e);
   }
   const readWithTimeout = (read) => async () => {
     try {
-      return await read();
+      return await Promise.race([read(), timeoutPromise]);
     } catch (e) {
       throw asTimeoutError(e);
     } finally {
@@ -127,7 +143,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log(`[QuotaWatcher v${chrome.runtime.getManifest().version}] installed`);
   await clearAllDnrRules();
   console.log("[QuotaWatcher] cleaned stale DNR rules");
-  chrome.alarms.create(ALARM_NAME, { periodInMinutes: REFRESH_INTERVAL_MINUTES });
+  chrome.alarms.create(ALARM_NAME, { periodInMinutes: ALARM_CHECK_INTERVAL_MINUTES });
   refreshAll();
 });
 
@@ -137,10 +153,14 @@ chrome.action.onClicked.addListener(() => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM_NAME) refreshAll();
+  if (alarm.name === ALARM_NAME) refreshDue();
 });
 
-// 全局串行锁，确保同一时间只有一个 fetchInstance 在跑
+// 全局串行锁，目前仅 settings「测试连接」使用：把并发测试按序排队。
+// 刷新链路（refreshAll/refreshDue/refreshOne）不再进串行链——DNR 规则按
+// 请求唯一 qwid 隔离、写库按卡片独立 key，并发安全；串行会把手动刷新排到
+// 到期轮后面（单卡最长 ~50s），排队超过 UI 兜底时长，表现为「接口已返回
+// 200 但卡片一直转圈直到超时」
 let _fetchChain = Promise.resolve();
 function serializeFetch(fn) {
   _fetchChain = _fetchChain.then(fn, fn);
@@ -165,6 +185,19 @@ async function getInstances() {
 }
 
 let _refreshing = false;
+let _roundWaiters = [];
+
+// 等待当前轮刷新结束。显式 refreshAll 请求不得被静默跳过：dashboard 点亮了
+// 所有卡的转圈，跳过意味着未到期卡片永远等不到写库事件、只能等 UI 超时
+function waitForRoundEnd() {
+  return _refreshing ? new Promise((resolve) => _roundWaiters.push(resolve)) : Promise.resolve();
+}
+
+function notifyRoundDone() {
+  const waiters = _roundWaiters;
+  _roundWaiters = [];
+  for (const w of waiters) w();
+}
 
 // SW 每次唤醒都是全新模块状态，语言会回落到浏览器默认；诊断文案（_diag）
 // 随语言生成并写入 storage，计算前先同步一次用户手动选择的语言
@@ -178,9 +211,11 @@ async function syncLocale() {
 }
 
 async function refreshAll() {
-  if (_refreshing) {
-    console.log("[QuotaWatcher] refresh already in progress, skipping");
-    return;
+  // 已有轮在跑（如 alarm 的到期轮）：等它结束后再补一轮完整刷新，而不是
+  // 静默跳过。while 复查防止多个等待者同时被唤醒后并发开跑
+  while (_refreshing) {
+    console.log("[QuotaWatcher] refresh round in progress, waiting for it to finish");
+    await waitForRoundEnd();
   }
   _refreshing = true;
   console.log("[QuotaWatcher] refreshing all...");
@@ -198,16 +233,64 @@ async function refreshAll() {
     ]).finally(() => clearTimeout(watchdog));
   } finally {
     _refreshing = false;
+    notifyRoundDone();
   }
 }
 
-// 刷新单个实例（卡片调用）
+// 到期检查：刷新「距上次刷新尝试 ≥ 自身间隔」的实例。
+// 下次刷新时刻 = _attemptedAt（每次尝试都会推进）+ 间隔，dashboard 的
+// 倒计时按同一公式计算，两条路径不会对失败卡片形成热循环重试。
+// 已有轮在跑时直接跳过（机会式刷新，下一分钟 alarm 会再查）——若排队等，
+// 轮次一旦超过 1 分钟，下个 alarm 会把同一批未跑完的卡再次判为到期重复入队
+async function refreshDue() {
+  if (_refreshing) {
+    console.log("[QuotaWatcher] refresh already in progress, skipping due check");
+    return;
+  }
+  _refreshing = true;
+  try {
+    await syncLocale();
+    const instances = await getInstances();
+    const dataResult = await chrome.storage.local.get(instances.map((i) => `data_${i.id}`));
+    const now = Date.now();
+    const due = instances.filter((inst) => {
+      const data = dataResult[`data_${inst.id}`];
+      // 老缓存没有 _attemptedAt 时回退 _fetchedAt；从未刷过的卡 last=0 视为到期
+      const last = (data && (data._attemptedAt || data._fetchedAt)) || 0;
+      return now - last >= getRefreshIntervalMin(inst) * 60000;
+    });
+    if (due.length > 0) {
+      console.log(`[QuotaWatcher] ${due.length} instance(s) due for refresh`);
+      let watchdog;
+      await Promise.race([
+        // 到期轮内并发刷新（与 refreshAll 同策略）：串行会让多卡到期的轮次
+        // 轻松超过 1 分钟的 alarm 周期，触发上面的重复入队
+        Promise.all(due.map((inst) => fetchAndStore(inst))),
+        new Promise((resolve) => {
+          watchdog = setTimeout(resolve, REFRESH_ALL_TIMEOUT_MS);
+        }),
+      ]).finally(() => clearTimeout(watchdog));
+    }
+  } finally {
+    _refreshing = false;
+    notifyRoundDone();
+  }
+}
+
+// 刷新单个实例（卡片调用）。直接发起、不进串行链也不受 _refreshing 限制：
+// 用户手动刷新应立即执行（哪怕到期轮正在跑），否则转圈要排队等到 UI 兜底
+// 超时。并发安全：DNR 规则按请求唯一 qwid 隔离，写库按卡片独立 key
 async function refreshOne(instanceId) {
+  console.log(`[QuotaWatcher] refreshOne(${instanceId}) start`);
   await syncLocale();
   const instances = await loadAllInstances();
   const inst = instances.find((i) => i.id === instanceId && i.enabled);
-  if (!inst) return;
-  await serializeFetch(() => fetchAndStore(inst));
+  if (!inst) {
+    console.log(`[QuotaWatcher] refreshOne(${instanceId}): instance not found or disabled`);
+    return;
+  }
+  await fetchAndStore(inst);
+  console.log(`[QuotaWatcher] refreshOne(${instanceId}) done`);
 }
 
 // 收集某数据源类型相关的候选 URL（用于网络错误时诊断出具体不通的域名）
@@ -222,12 +305,17 @@ function collectUrlsForType(type) {
 
 // 实际获取数据并存入 storage
 async function fetchAndStore(inst) {
+  // 本次尝试时间：无论成功失败都推进，作为「下次刷新 = 上次尝试 + 间隔」的基准，
+  // 避免失败但保留旧数据的卡片因 _fetchedAt 不更新而被到期检查反复热重试
+  const attemptedAt = Date.now();
+  console.log(`[QuotaWatcher] ${inst.id} fetching (${inst.type})`);
   try {
     const data = await fetchInstance(inst);
     await chrome.storage.local.set({
       [`data_${inst.id}`]: {
         ...data,
-        _fetchedAt: Date.now(),
+        _fetchedAt: attemptedAt,
+        _attemptedAt: attemptedAt,
         _error: null,
         _lastError: null,
         _diag: null,
@@ -250,6 +338,7 @@ async function fetchAndStore(inst) {
       await chrome.storage.local.set({
         [`data_${inst.id}`]: {
           ...oldData,
+          _attemptedAt: attemptedAt,
           _lastError: err.message,
           _diag: diag,
         },
@@ -258,7 +347,8 @@ async function fetchAndStore(inst) {
     } else {
       await chrome.storage.local.set({
         [`data_${inst.id}`]: {
-          _fetchedAt: Date.now(),
+          _fetchedAt: attemptedAt,
+          _attemptedAt: attemptedAt,
           _error: err.message,
           _lastError: null,
           _diag: diag,
@@ -468,6 +558,19 @@ async function fetchInstance(inst) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log("[QuotaWatcher] message received:", msg && msg.action);
+  // 诊断查询：dashboard 打开时也会自动查询一次并打到页面 console，
+  // 用于确认后台版本 / SW 存活时长 / 是否有刷新轮卡死
+  if (msg.action === "diag") {
+    sendResponse({
+      ok: true,
+      version: chrome.runtime.getManifest().version,
+      swUptimeMs: Date.now() - _swStartedAt,
+      refreshing: _refreshing,
+      roundWaiters: _roundWaiters.length,
+    });
+    return;
+  }
   if (msg.action === "refresh") {
     refreshAll().then(() => sendResponse({ ok: true }));
     return true;

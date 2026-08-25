@@ -55,8 +55,8 @@ A Chrome browser extension (Manifest V3) that **monitors the usage quota of mult
 - **Reset countdown**: real-time display of time until each window resets
 - **Burn-rate prediction**: linear extrapolation of current consumption to estimate when quota runs out and whether it beats the reset
 - **3 theme modes**: light / dark / follow system
-- **Auto refresh**: background fetch every 5 minutes, plus manual single-card or full refresh
-- **Retry & timeout handling**: a spinner running longer than 5s shows a "click to retry" link; 30s is treated as a timeout with a failure notice (never stuck spinning forever)
+- **Auto refresh**: per-card refresh interval (default 5 minutes, configurable 1–60 min in Settings) with a live countdown to the next refresh shown on each card; fires on schedule while the dashboard is open, and the background keeps cards fresh per their own intervals when it is closed. Manual single-card / full refresh also available
+- **Retry & timeout handling**: a spinner running longer than 5s shows a "click to retry" link; 60s is treated as a timeout with a failure notice (never stuck spinning forever)
 - **Login detection & local lock**: local-cookie instances report login state in real time; only the first instance of a type may use local cookie auth (the rest are locked to manual cURL)
 - **Adjustable columns**: Dashboard supports 1/2/3-column layouts
 

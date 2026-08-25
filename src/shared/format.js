@@ -32,9 +32,10 @@ export function formatTime(ts) {
 }
 
 // 相对时间：「刚刚」/「X 秒前」/「X 分钟前」/「X 小时前」/「X 天前」
-export function formatRelativeTime(ts) {
+// now 可由调用方传入（组件里传响应式 tick，让文案每秒重算），缺省取当前时间
+export function formatRelativeTime(ts, now = Date.now()) {
   if (!ts) return "-";
-  const diffMs = Date.now() - ts;
+  const diffMs = now - ts;
   if (diffMs < 0) return t("format.justNow");
   const sec = Math.floor(diffMs / 1000);
   if (sec < 10) return t("format.justNow");

@@ -13,7 +13,7 @@ export default {
   // —— dashboard/SourceCard.vue ——
   "card.refresh": "刷新",
   "card.refreshing": "刷新中",
-  "card.timeout": "刷新超时（>30s）",
+  "card.timeout": "刷新超时（>60s）",
   "card.retry": "点击重试",
   "card.slow": "刷新较慢…",
   "card.noData": "暂无数据，点击刷新获取",
@@ -23,6 +23,8 @@ export default {
   "card.showLast": "获取失败，显示上次数据",
   "card.reset": "已重置",
   "card.countdown": "重置倒计时 {time}",
+  "card.nextRefresh": "距下次刷新 {time}",
+  "card.nextRefreshSoon": "即将刷新",
 
   // —— settings/App.vue ——
   "settings.title": "设置",
@@ -45,6 +47,7 @@ export default {
   "settings.deleteConfirm": "确认删除「{name}」？",
   "settings.unknownSource": "未知数据源",
   "settings.checkFailed": "检测失败：{msg}",
+  "settings.intervalMinutes": "{n} 分钟",
   "settings.testMissingCurlTitle": "缺少 cURL",
   "settings.testMissingCurlDetail": "手动模式下必须粘贴 cURL 才能测试",
   "settings.testMissingCurlAdvice": "请从 DevTools → Network → Copy as cURL 复制后粘贴到上方输入框",
@@ -54,6 +57,7 @@ export default {
   // —— settings/InstanceCard.vue ——
   "instance.delete": "删除",
   "instance.type": "类型",
+  "instance.refreshInterval": "自动刷新",
   "instance.name": "名称",
   "instance.auth": "鉴权",
   "instance.authLocal": "本地 Cookie（自动）",

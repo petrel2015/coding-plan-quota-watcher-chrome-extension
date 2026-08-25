@@ -1,0 +1,18 @@
+common.css
+  h_47dbf5e7272ced 206-227
+src/dashboard/App.vue
+  h_47dbf5e7272ced 5-8,58-61
+src/settings/App.vue
+  h_47dbf5e7272ced 5-8,96-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a92c6b99953b44a4e1fbe481446e98c77a1ca074",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

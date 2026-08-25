@@ -1,0 +1,36 @@
+README.md
+  h_47dbf5e7272ced 27-30,54
+README.zh-CN.md
+  h_47dbf5e7272ced 27-30,54
+common.css
+  h_47dbf5e7272ced 55-58,107-109,152-154,411,428-447
+manifest.json
+  h_47dbf5e7272ced 4
+package-lock.json
+  h_47dbf5e7272ced 3,9
+package.json
+  h_47dbf5e7272ced 3
+src/dashboard/SourceCard.vue
+  h_47dbf5e7272ced 40-42,54,66-68,74,209
+src/dashboard/WindowList.vue
+  h_47dbf5e7272ced 1-162
+src/shared/locales/en.js
+  h_47dbf5e7272ced 134-136
+src/shared/locales/zh.js
+  h_47dbf5e7272ced 134-136
+src/shared/render.js
+  h_47dbf5e7272ced 7-10,57-59,72,110,169,202-204,216,224-264,278-301
+test/render.test.js
+  h_47dbf5e7272ced 3,22-25,150-245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "0667b23abf24313d2c0ef7224d4f0a150c3d63f6",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

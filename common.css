@@ -203,6 +203,28 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* topbar 标题组：标题 + 版本号徽章 */
+.topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 版本号徽章 — 与卡片 planType 徽章同款描边样式 */
+.topbar-version {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- 通用按钮系统 ---------- */
 /* 基类：次级按钮（浅底 + 边框） */
 .btn {

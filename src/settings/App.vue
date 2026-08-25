@@ -2,7 +2,10 @@
   <div>
     <!-- topbar -->
     <div class="topbar">
-      <h1>{{ t('settings.title') }}</h1>
+      <div class="topbar-title">
+        <h1>{{ t('settings.title') }}</h1>
+        <span v-if="version" class="topbar-version">v{{ version }}</span>
+      </div>
       <div class="topbar-right">
         <el-button @click="toggleLocale">{{ nextLangLabel }}</el-button>
         <el-button @click="goBack">{{ t('settings.back') }}</el-button>
@@ -90,6 +93,10 @@ export default {
   components: { InstanceCard },
   data() {
     return {
+      // 当前扩展版本（topbar 徽章展示；非扩展环境取不到则为空、不显示）
+      version: (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getManifest)
+        ? chrome.runtime.getManifest().version
+        : "",
       instances: [],
       displayCols: 2,
       theme: "auto",

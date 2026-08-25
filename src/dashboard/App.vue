@@ -2,7 +2,10 @@
   <div>
     <!-- topbar -->
     <div class="topbar">
-      <h1>{{ t('dashboard.title') }}</h1>
+      <div class="topbar-title">
+        <h1>{{ t('dashboard.title') }}</h1>
+        <span v-if="version" class="topbar-version">v{{ version }}</span>
+      </div>
       <div class="topbar-right">
         <el-button @click="goSettings">{{ t('dashboard.settings') }}</el-button>
         <el-button type="primary" :loading="refreshingAll" @click="refreshAll(false)">{{ t('dashboard.refreshAll') }}</el-button>
@@ -52,6 +55,10 @@ export default {
   components: { SourceCard },
   data() {
     return {
+      // 当前扩展版本（topbar 徽章展示；非扩展环境取不到则为空、不显示）
+      version: (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getManifest)
+        ? chrome.runtime.getManifest().version
+        : "",
       instances: [],
       dataMap: {}, // { [instanceId]: data }
       displayCols: 2,

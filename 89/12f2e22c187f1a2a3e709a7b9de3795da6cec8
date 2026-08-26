@@ -1,0 +1,18 @@
+src/dashboard/SourceCard.vue
+  h_47dbf5e7272ced 44-48,62-66,79,103-108
+src/shared/locales/en.js
+  h_47dbf5e7272ced 21-23
+src/shared/locales/zh.js
+  h_47dbf5e7272ced 21-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "8912f2e22c187f1a2a3e709a7b9de3795da6cec8",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

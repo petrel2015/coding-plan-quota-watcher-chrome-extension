@@ -41,7 +41,11 @@
       <div v-if="normalized" class="card-body">
         <WindowList :windows="normalized.windows" :now="now" />
       </div>
-      <div v-else class="error-msg">{{ t('card.formatError') }}</div>
+      <div v-else class="diag-block diag-error">
+        <div class="diag-title">{{ t('card.formatError') }}</div>
+        <div class="diag-detail">{{ t('card.formatErrorDetail') }}</div>
+        <div class="diag-advice">{{ t('card.formatErrorAdvice', { url: formatUrl }) }}</div>
+      </div>
     </template>
     <template v-else-if="data._error && !data._hasValidData">
       <div class="diag-block diag-error">
@@ -55,7 +59,11 @@
         <WindowList :windows="normalized.windows" :now="now" />
         <div v-for="(ex, i) in normalizedExtras" :key="'ex' + i" class="window-detail">{{ ex.label }}: {{ ex.value }}</div>
       </div>
-      <div v-else class="error-msg">{{ t('card.formatError') }}</div>
+      <div v-else class="diag-block diag-error">
+        <div class="diag-title">{{ t('card.formatError') }}</div>
+        <div class="diag-detail">{{ t('card.formatErrorDetail') }}</div>
+        <div class="diag-advice">{{ t('card.formatErrorAdvice', { url: formatUrl }) }}</div>
+      </div>
     </template>
 
     <!-- 更新时间 -->
@@ -68,7 +76,7 @@ import WindowList from "./WindowList.vue";
 import { normalizeData } from "../shared/render.js";
 import { formatRelativeTime } from "../shared/format.js";
 import { diagnoseError } from "../shared/diagnose.js";
-import { getRefreshIntervalMin } from "../shared/sources.js";
+import { getRefreshIntervalMin, SOURCE_TEMPLATES } from "../shared/sources.js";
 import { t } from "../shared/i18n.js";
 
 export default {
@@ -91,6 +99,12 @@ export default {
       } catch (e) {
         return null;
       }
+    },
+    // 给"格式解析异常"诊断块用：从 SOURCE_TEMPLATES 拿平台主页 / 套餐页 URL，
+    // 让用户知道去哪里确认账户/套餐状态
+    formatUrl() {
+      const tmpl = SOURCE_TEMPLATES[this.inst.type];
+      return (tmpl && (tmpl.curlHintUrl || tmpl.loginUrl)) || "";
     },
     // 失败诊断：优先用 background 写入的 _diag；老缓存没有时现场归类
     diag() {

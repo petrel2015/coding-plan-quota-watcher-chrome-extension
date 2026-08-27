@@ -131,6 +131,10 @@ zip 内容是**可加载的最小扩展包**（`manifest.json` + `dist/` 产物 
 
 > ⚠️ `.pem` 是扩展的身份凭证，**务必保管好且不要提交到 git**（已在 .gitignore 排除）。丢了就无法给同一个扩展发布更新，Chrome 会视为新扩展。
 
+## iOS Safari 版
+
+iOS Safari 版在独立仓库 **[coding-plan-quota-watcher-apple](https://github.com/petrel2015/coding-plan-quota-watcher-apple)** 维护（iOS App + Safari Web Extension 的 Xcode 多 target 工程，watchOS 规划中）。扩展 JS 源码仍以本仓库为单源：把两个仓库 clone 到同一目录后，在 apple 仓库执行 `npm run sync` 即可从本仓库构建并同步产物到 Xcode 工程，构建与运行步骤见该仓库 README。
+
 ## 配置数据源
 
 点击 Dashboard 右上角「设置」按钮进入配置页。
@@ -163,12 +167,13 @@ zip 内容是**可加载的最小扩展包**（`manifest.json` + `dist/` 产物 
 
 ```
 manifest.json          扩展清单（service_worker 指向 dist/background.js）
-vite.config.js         Vite 构建配置（multi-entry）
+vite.config.js         Vite 构建配置（双 target：pages / background）
 common.css             共享设计 token（颜色/圆角/阴影，三档主题 CSS 变量）
 element-overrides.css  Element-UI 组件深色模式覆盖
 scripts/
 ├── sync-version.mjs   版本号同步：package.json → manifest.json
-└── package.mjs        一键打包：sync-version + build + zip → releases/
+├── package.mjs        一键打包：sync-version + build + zip → releases/
+└── build-all.mjs      两轮构建编排：页面轮 + background 轮（自包含 IIFE）
 src/
 ├── settings/          settings 页（Vue 2 + Element-UI）
 │   ├── main.js        Vue 入口
@@ -179,7 +184,7 @@ src/
 │   ├── App.vue        仪表盘根组件
 │   └── SourceCard.vue 用量卡片组件
 ├── background/        Service Worker
-│   └── main.js        ES module：定时拉取、DNR 注入、消息分发
+│   └── main.js        定时拉取、DNR 注入、消息分发（打包为自包含 IIFE）
 └── shared/            跨页面共享的 ES module
     ├── sources.js     数据源模板、默认配置、字段迁移
     ├── render.js      归一化 + 消耗预测
@@ -219,14 +224,15 @@ npm run test:watch  # 监听模式
 ```
 
 **关键技术点**：
-- **declarativeNetRequest (DNR)**：Service Worker 的 `fetch` 不带 cookie，需用 DNR 动态规则在请求发出前注入 `cookie` header。每个请求用唯一 `_qwid` 查询参数匹配规则，请求结束后立即清理。
+- **declarativeNetRequest (DNR)**：Service Worker 的 `fetch` 不带 cookie，需用 DNR 动态规则在请求发出前注入 `cookie` header。每个请求用唯一 `_qwid` 查询参数匹配规则，请求结束后立即清理。Chromium 下额外用 `resourceTypes` 收窄匹配；WebKit 对扩展自身请求的类别划分不同，非 Chromium 环境省略该条件（见 `background/main.js` 的 `IS_CHROMIUM`）。
 - **并发批量刷新**：`refreshAll` 用 `Promise.all` 并行拉取所有实例——每个请求分配唯一 DNR ruleId + `_qwid`，规则互不冲突，故可并发。单卡刷新与测试连接仍走 `serializeFetch` 串行锁。
 - **storage 推送**：前端不轮询，通过 `chrome.storage.onChanged` 监听后台写入，Vue 响应式自动更新 DOM。
-- **ES module 统一**：background service worker 用 `"type": "module"`，与页面共享 `src/shared/` 下的纯逻辑，无重复。
+- **跨浏览器 background**：manifest 不声明 `background.type: "module"`（Safari 不支持该键），background 由构建脚本单独打成自包含 IIFE 单文件（无 import、无共享 chunk），Chrome 的 classic service worker 与 Safari 都能直接加载；与页面共享的 `src/shared/` 纯逻辑保持不变。
 
 ## 技术栈
 
 - Chrome Extension Manifest V3
+- Safari Web Extension（iOS，Xcode 工程在 [coding-plan-quota-watcher-apple](https://github.com/petrel2015/coding-plan-quota-watcher-apple) 仓库）
 - Vue 2.7 + Element-UI 2.15（SFC，Vite 编译时模板编译）
 - Vite 5（multi-entry 打包）
 - vitest（单元测试）

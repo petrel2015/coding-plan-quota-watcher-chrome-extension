@@ -4,26 +4,39 @@ import { resolve } from "path";
 
 // MV3 扩展打包配置
 // - settings / dashboard：Vue 2 SFC，打包成页面入口 JS + CSS
-// - background：service worker，ES module，不打包 Vue
+// - background：第二轮单独构建成自包含 IIFE —— 无静态 import、无共享 chunk。
+//   原因：Safari 不支持 manifest 的 background.type: "module"（safari-web-
+//   extension-converter 会警告 type 键），按 classic 脚本加载含 import 的
+//   worker 会直接语法报错；打成自包含脚本后，同一份产物在 Chrome（classic）
+//   与 Safari 里都能加载，manifest 也无需再声明 type 字段。
+//   两轮构建由 scripts/build-all.mjs 编排：先跑页面轮，再设
+//   QW_BUILD_TARGET=background 跑 background 轮。
 // 产物输出到 dist/，HTML 留根目录引用 dist/assets/*
-export default defineConfig({
-  plugins: [vue()],
+
+const sharedResolve = {
+  alias: {
+    // 锁定 runtime-only 构建，杜绝运行时模板编译（MV3 禁 unsafe-eval）
+    vue: "vue/dist/vue.runtime.esm.js",
+  },
+};
+
+const sharedPlugins = [vue()];
+
+const pagesConfig = {
+  plugins: sharedPlugins,
   base: "./",
-  resolve: {
-    alias: {
-      // 锁定 runtime-only 构建，杜绝运行时模板编译（MV3 禁 unsafe-eval）
-      vue: "vue/dist/vue.runtime.esm.js",
-    },
+  resolve: sharedResolve,
+  // vitest 配置
+  test: {
+    setupFiles: ["./test/setup.js"],
   },
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    // service worker 不参与 code-split，避免动态 import 导致多文件
     rollupOptions: {
       input: {
         settings: resolve(__dirname, "src/settings/main.js"),
         dashboard: resolve(__dirname, "src/dashboard/main.js"),
-        background: resolve(__dirname, "src/background/main.js"),
       },
       output: {
         entryFileNames: "[name].js",
@@ -49,7 +62,31 @@ export default defineConfig({
       },
     },
   },
-  test: {
-    setupFiles: ["./test/setup.js"],
+};
+
+// background：单文件自包含 IIFE（无静态 import，无共享 chunk）
+const backgroundConfig = {
+  plugins: sharedPlugins, // 保持与主配置一致的模块解析行为
+  base: "./",
+  resolve: sharedResolve,
+  build: {
+    outDir: "dist",
+    emptyOutDir: false, // 页面构建已清空过 dist，这里只追加/覆盖 background.js
+    rollupOptions: {
+      input: {
+        background: resolve(__dirname, "src/background/main.js"),
+      },
+      output: {
+        format: "iife",
+        entryFileNames: "[name].js",
+        inlineDynamicImports: true,
+      },
+    },
   },
+};
+
+export default defineConfig(() => {
+  const target = process.env.QW_BUILD_TARGET;
+  if (target === "background") return backgroundConfig;
+  return pagesConfig;
 });

@@ -131,6 +131,10 @@ For scenarios that need `.crx` binary distribution with a fixed private key:
 
 > ⚠️ `.pem` is the extension's identity credential — **keep it safe and never commit it to git** (already excluded in .gitignore). If you lose it, you can't publish updates for the same extension; Chrome will treat it as a new extension.
 
+## iOS Safari Version
+
+The iOS Safari version lives in a separate repo, **[coding-plan-quota-watcher-apple](https://github.com/petrel2015/coding-plan-quota-watcher-apple)** (an Xcode multi-target project: iOS app + Safari Web Extension, watchOS planned). The extension's JS source stays single-sourced in this repo: clone both repos side by side, then run `npm run sync` inside the apple repo to build from this repo and sync the artifacts into the Xcode project — see that repo's README for build & run steps.
+
 ## Configuring Data Sources
 
 Click the "Settings" button in the top-right corner of the Dashboard to open the configuration page.
@@ -163,12 +167,13 @@ Click the "Settings" button in the top-right corner of the Dashboard to open the
 
 ```
 manifest.json          Extension manifest (service_worker points to dist/background.js)
-vite.config.js         Vite config (multi-entry)
+vite.config.js         Vite config (dual target: pages / background)
 common.css             Shared design tokens (colors/radius/shadow, 3-theme CSS variables)
 element-overrides.css  Element-UI dark-mode overrides
 scripts/
 ├── sync-version.mjs   Version sync: package.json → manifest.json
-└── package.mjs        One-command package: sync-version + build + zip → releases/
+├── package.mjs        One-command package: sync-version + build + zip → releases/
+└── build-all.mjs      Two-pass build orchestration: pages pass + background pass (self-contained IIFE)
 src/
 ├── settings/          Settings page (Vue 2 + Element-UI)
 │   ├── main.js        Vue entry
@@ -179,7 +184,7 @@ src/
 │   ├── App.vue        Dashboard root component
 │   └── SourceCard.vue Usage card component
 ├── background/        Service worker
-│   └── main.js        ES module: scheduled fetch, DNR injection, message dispatch
+│   └── main.js        Scheduled fetch, DNR injection, message dispatch (bundled as self-contained IIFE)
 └── shared/            ES modules shared across pages
     ├── sources.js     Data source templates, default config, field migration
     ├── render.js      Normalization + burn-rate prediction
@@ -219,14 +224,15 @@ Platform API → background SW (DNR injects cookie) → storage.local → onChan
 ```
 
 **Key technical points**:
-- **declarativeNetRequest (DNR)**: the Service Worker's `fetch` doesn't carry cookies, so a DNR dynamic rule injects the `cookie` header right before the request. Each request uses a unique `_qwid` query param to match its rule, which is cleaned up immediately after.
+- **declarativeNetRequest (DNR)**: the Service Worker's `fetch` doesn't carry cookies, so a DNR dynamic rule injects the `cookie` header right before the request. Each request uses a unique `_qwid` query param to match its rule, which is cleaned up immediately after. On Chromium the match is additionally narrowed via `resourceTypes`; WebKit classifies extension-issued requests differently, so non-Chromium environments omit that condition (see `IS_CHROMIUM` in `background/main.js`).
 - **Concurrent batch refresh**: `refreshAll` fetches all instances in parallel (`Promise.all`) — safe because each request allocates a unique DNR rule ID + `_qwid`, so rules never collide. Single-card refresh and test-connection still run through the `serializeFetch` lock.
 - **Storage push**: the frontend doesn't poll — it listens to `chrome.storage.onChanged` for background writes, and Vue reactively updates the DOM.
-- **Shared ES modules**: the background service worker uses `"type": "module"` and shares pure logic with the pages via `src/shared/`, with no duplication.
+- **Cross-browser background**: the manifest no longer declares `background.type: "module"` (unsupported by Safari). The background is built as a self-contained IIFE single file (no imports, no shared chunks) that loads as a classic service worker in Chrome and directly in Safari; pages still share pure logic with it via `src/shared/`.
 
 ## Tech Stack
 
 - Chrome Extension Manifest V3
+- Safari Web Extension (iOS; Xcode project in the [coding-plan-quota-watcher-apple](https://github.com/petrel2015/coding-plan-quota-watcher-apple) repo)
 - Vue 2.7 + Element-UI 2.15 (SFC, template compiled by Vite at build time)
 - Vite 5 (multi-entry bundling)
 - vitest (unit tests)

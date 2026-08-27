@@ -29,6 +29,12 @@ const REFRESH_ALL_TIMEOUT_MS = 120000;
 // DNR（declarativeNetRequest）助手
 // ------------------------------------------------------------
 
+// 仅 Chromium 提供 navigator.userAgentData。DNR 条件里的 resourceTypes 在
+// Chromium 能把 SW 发起的 fetch 稳定归为 xmlhttprequest；WebKit（Safari/iOS）
+// 对扩展自身请求的类别划分不同，写死可能匹配不上导致 Cookie 注入失效，
+// 故非 Chromium 浏览器下省略该条件，仅靠唯一 _qwid 参数限定作用域。
+const IS_CHROMIUM = typeof navigator !== "undefined" && !!navigator.userAgentData;
+
 // 清除所有残留动态规则
 async function clearAllDnrRules() {
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
@@ -125,7 +131,7 @@ async function fetchWithDnrCookie(url, cookieStr, fetchOpts) {
       },
       condition: {
         urlFilter: `_qwid=${qwid}`,
-        resourceTypes: ["xmlhttprequest", "other"],
+        ...(IS_CHROMIUM ? { resourceTypes: ["xmlhttprequest", "other"] } : {}),
       },
     }],
   });

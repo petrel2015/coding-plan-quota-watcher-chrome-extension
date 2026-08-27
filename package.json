@@ -6,7 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "vite build",
+    "build": "node scripts/build-all.mjs",
+    "build:pages": "node scripts/build-all.mjs --only=pages",
+    "build:background": "node scripts/build-all.mjs --only=background",
     "sync-version": "node scripts/sync-version.mjs",
     "prebuild": "node scripts/sync-version.mjs",
     "package": "node scripts/package.mjs",

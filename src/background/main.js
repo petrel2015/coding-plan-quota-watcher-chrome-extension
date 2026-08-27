@@ -501,6 +501,14 @@ async function fetchInstance(inst) {
   }
   const result = await resp.json();
 
+  // 业务层错误：部分平台（如智谱）鉴权失败时仍返回 HTTP 200，body 形如
+  // {"code":1001,"msg":"Header中未收到Authorization参数...","success":false}。
+  // 正常用量响应不含 success:false + code，识别到即抛错交给 diagnoseError 归类，
+  // 否则会流入字段校验被误报成「数据格式解析异常」
+  if (result && typeof result === "object" && result.success === false && result.code != null) {
+    throw new Error(`API business error ${result.code}: ${result.msg || ""}`);
+  }
+
   // chatgpt-codex: 额外获取 codex-reset.com 重置预测（公开 API，无需鉴权）
   if (inst.type === "chatgpt-codex") {
     try {

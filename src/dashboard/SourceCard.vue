@@ -38,13 +38,10 @@
         <div v-if="diag && diag.detail" class="diag-detail">{{ diag.detail }}</div>
         <div v-if="diag && diag.advice" class="diag-advice">{{ diag.advice }}</div>
       </div>
+      <!-- 上次数据仍有效则显示窗口；无效（如缓存的坏 body）时诊断块已说明
+           失败原因，不再追加「格式解析异常」块，避免同一错误重复展示 -->
       <div v-if="normalized" class="card-body">
         <WindowList :windows="normalized.windows" :now="now" />
-      </div>
-      <div v-else class="diag-block diag-error">
-        <div class="diag-title">{{ t('card.formatError') }}</div>
-        <div class="diag-detail">{{ t('card.formatErrorDetail') }}</div>
-        <div class="diag-advice">{{ t('card.formatErrorAdvice', { url: formatUrl }) }}</div>
       </div>
     </template>
     <template v-else-if="data._error && !data._hasValidData">

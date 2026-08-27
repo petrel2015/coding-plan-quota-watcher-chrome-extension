@@ -199,6 +199,33 @@ export function diagnoseError(err, options = {}) {
     }
   }
 
+  // —— 5b. 业务层错误（HTTP 200 但 body 带 code/msg/success:false，如智谱 1001）——
+  // msg 按鉴权相关关键词判别：命中则按「登录凭据已过期」提示，不再报「数据格式异常」
+  const bizErrMatch = message.match(/api business error\s*(\d+)\s*:\s*(.*)/i);
+  if (bizErrMatch) {
+    const bizCode = parseInt(bizErrMatch[1], 10);
+    const bizMsg = bizErrMatch[2].trim();
+    const isAuthBizError =
+      bizCode === 1001 ||
+      /authorization|身份验证|鉴权|登录态|未登录|login|auth|token/i.test(bizMsg);
+    if (isAuthBizError) {
+      return {
+        category: "auth_expired",
+        title: t("diag.bizAuthExpired.title"),
+        detail: bizMsg || t("diag.bizAuthExpired.detailFallback"),
+        advice: reauthAdvice(authMode),
+        authMode,
+      };
+    }
+    return {
+      category: "bad_response",
+      title: t("diag.bizError.title", { code: bizCode }),
+      detail: bizMsg || t("diag.bizError.detailFallback"),
+      advice: t("diag.bizError.advice"),
+      authMode,
+    };
+  }
+
   // —— 6. JSON 解析失败（响应不是 JSON，多为 HTML 登录页重定向）——
   if (/unexpected token|json|is not valid json|syntaxerror/i.test(message) && /unexpected token|[a-z]+ is not valid json/i.test(message)) {
     return {

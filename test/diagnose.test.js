@@ -141,6 +141,53 @@ describe("diagnoseError - HTTP 其它状态", () => {
   });
 });
 
+describe("diagnoseError - 业务层错误（HTTP 200 + code/msg/success:false）", () => {
+  it("智谱 1001（未收到 Authorization）归 auth_expired，直接提示重新登录", () => {
+    const d = diagnoseError(
+      "API business error 1001: Header中未收到Authorization参数，无法进行身份验证。",
+      { type: "zhipu-glm", authMode: "local" },
+    );
+    expect(d.category).toBe("auth_expired");
+    expect(d.title).toBe("登录凭据已过期，请重新登录");
+    expect(d.detail).toContain("Authorization");
+    expect(d.advice).toContain("重新登录");
+  });
+
+  it("非 1001 但 msg 含鉴权关键词（如 token）也归 auth_expired", () => {
+    const d = diagnoseError("API business error 2003: invalid token", {
+      type: "zhipu-glm",
+      authMode: "local",
+    });
+    expect(d.category).toBe("auth_expired");
+  });
+
+  it("manual 模式下建议重新粘贴 cURL", () => {
+    const d = diagnoseError(
+      "API business error 1001: Header中未收到Authorization参数，无法进行身份验证。",
+      { type: "zhipu-glm", authMode: "manual" },
+    );
+    expect(d.category).toBe("auth_expired");
+    expect(d.advice).toContain("cURL");
+  });
+
+  it("非鉴权类业务错误归 bad_response 并带错误码", () => {
+    const d = diagnoseError("API business error 3001: plan expired", {
+      type: "zhipu-glm",
+      authMode: "local",
+    });
+    expect(d.category).toBe("bad_response");
+    expect(d.title).toContain("3001");
+    expect(d.detail).toContain("plan expired");
+  });
+
+  it("bizAuthExpired 归为终态（自动刷新不再转圈）", () => {
+    const d = diagnoseError("API business error 1001: authorization missing", {
+      type: "zhipu-glm",
+    });
+    expect(isTerminalAuthDiag(d)).toBe(true);
+  });
+});
+
 describe("diagnoseError - 响应异常", () => {
   it("JSON 解析失败（unexpected token）归 bad_response 并提示登录态", () => {
     const d = diagnoseError("Unexpected token < in JSON at position 0", {

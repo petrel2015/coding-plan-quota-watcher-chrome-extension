@@ -145,12 +145,68 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log("[QuotaWatcher] cleaned stale DNR rules");
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: ALARM_CHECK_INTERVAL_MINUTES });
   refreshAll();
+  // 注册右键扩展图标菜单。菜单注册本身是持久的，但扩展重载/更新时旧 id
+  // 残留会导致同 id 二次 create 抛错，先 removeAll 再建
+  if (chrome.contextMenus) {
+    chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({
+        id: MENU_OPEN_WINDOW,
+        title: chrome.i18n.getMessage("openDashboardWindow") || "Open in standalone window",
+        contexts: ["action"],
+      });
+    });
+  }
 });
 
-// 点击扩展图标直接打开 dashboard
+// 点击扩展图标：新标签页打开 dashboard
 chrome.action.onClicked.addListener(() => {
   chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
 });
+
+// ------------------------------------------------------------
+// 独立窗口（App 式）打开 dashboard
+// ------------------------------------------------------------
+
+const MENU_OPEN_WINDOW = "open-dashboard-window";
+// 已开独立窗口的 windowId 存 session（浏览器会话内有效，SW 被杀不受影响）。
+// 不用 windows.getAll 找 tab URL 的方式判重——读 tab.url 需要 tabs 权限，
+// 会触发商店「读取浏览记录」的敏感提示，不值得为此引入
+const DASH_WINDOW_KEY = "dashboardWindowId";
+
+if (chrome.contextMenus) {
+  chrome.contextMenus.onClicked.addListener((info) => {
+    if (info.menuItemId === MENU_OPEN_WINDOW) openDashboardWindow();
+  });
+}
+
+// 在无地址栏的 popup 独立窗口中打开 dashboard。已有独立窗口时聚焦复用
+// （单实例的 App 手感），窗口已被用户关掉则重新开一个
+async function openDashboardWindow() {
+  const url = chrome.runtime.getURL("dashboard.html");
+  // Safari iOS 等无 windows API 的环境：回退新标签页（那里没有窗口概念）
+  if (!chrome.windows) {
+    chrome.tabs.create({ url });
+    return;
+  }
+  try {
+    const stored = await chrome.storage.session.get(DASH_WINDOW_KEY);
+    const winId = stored && stored[DASH_WINDOW_KEY];
+    if (winId != null) {
+      const win = await chrome.windows.get(winId);
+      if (win && win.type === "popup") {
+        await chrome.windows.update(winId, { focused: true });
+        return;
+      }
+    }
+  } catch {
+    // 记录的窗口已不存在（或 session 读取失败），走新开
+  }
+  // popup 窗口不支持手动调整大小，尺寸给足以平铺卡片
+  const win = await chrome.windows.create({ url, type: "popup", width: 1200, height: 820 });
+  if (win && win.id != null) {
+    await chrome.storage.session.set({ [DASH_WINDOW_KEY]: win.id }).catch(() => {});
+  }
+}
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) refreshDue();

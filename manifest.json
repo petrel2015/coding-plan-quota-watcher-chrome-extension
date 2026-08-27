@@ -8,6 +8,7 @@
     "cookies",
     "storage",
     "alarms",
+    "contextMenus",
     "declarativeNetRequest"
   ],
   "host_permissions": [

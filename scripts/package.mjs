@@ -29,6 +29,7 @@ const EXCLUDE_TOP = new Set([
   ".vscode",
   ".idea",
   ".zcode",
+  ".mimosa", // 安全扫描工具的本地状态目录，绝不能进发布产物
   "scripts",
   "src", // 运行时用 dist/ 产物，不需要源码
   "vite.config.js",

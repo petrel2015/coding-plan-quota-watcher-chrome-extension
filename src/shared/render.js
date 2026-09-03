@@ -279,6 +279,11 @@ export function computeForecast(win) {
   // 跨窗口约束优先：名义 100% 之前会先撞上别的窗口的墙（虚上限），
   // 预测终点从 100% 换成 capPct；若约束窗口在撞墙前自己先重置，约束失效
   if (win.capPct != null && win.capPct < 100 && win.bindingLabel) {
+    // 约束窗口剩余已为 0 → 虚上限就是当前用量，任何窗口此刻都已撞墙，
+    // 速度外推无意义（浮点残差还会把撞墙时刻算成几分钟后），直接判阻塞
+    if (Number.isFinite(win.bindingRemaining) && win.bindingRemaining <= 0) {
+      return { text: t("render.fcBlocked", { win: win.bindingLabel }), level: "warn" };
+    }
     const capHitMs = now + (win.capPct - pct) / consumeRatePerMs;
     const capLiftedBeforeHit = win.bindingResetMs > 0 && capHitMs >= win.bindingResetMs;
     if (!capLiftedBeforeHit) {

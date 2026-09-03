@@ -236,6 +236,26 @@ describe("computeForecast - 跨窗口约束下的预测", () => {
     expect(fc.text).toContain("已被周窗口额度限住");
   });
 
+  it("约束窗口已耗尽但 usedPct 舍入产生浮点残差 → 仍判 fcBlocked 而非临近 fcCapHit", () => {
+    // 复现线上场景：5h 窗口剩余 0（已 100%），周窗口 usedPct 舍入到 89.0，
+    // capPct 按原始值 89.04 计算，残差外推出 2 分钟后撞墙的误导性预警
+    const now = Date.now();
+    const fc = computeForecast({
+      label: "周窗口",
+      usedPct: 89.0,
+      used: 53400,
+      quota: 60000,
+      startMs: now - 24 * 3600e3,
+      resetMs: now + 15 * 3600e3,
+      capPct: 89.04,
+      bindingLabel: "5小时窗口",
+      bindingResetMs: now + 2 * 60e3,
+      bindingRemaining: 0,
+    });
+    expect(fc.level).toBe("warn");
+    expect(fc.text).toContain("已被5小时窗口额度限住");
+  });
+
   it("撞墙时刻晚于本窗口重置 → 本周期内不受约束（fcOk）", () => {
     // 周窗口剩 850 → 有效上限 95%，需 8.5h 撞墙 > 本窗口 4h 重置
     const fc = computeForecast(capped5h(850, 3 * 86400));

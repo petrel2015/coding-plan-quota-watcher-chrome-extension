@@ -85,6 +85,7 @@ import {
   DEFAULT_REFRESH_INTERVAL_MIN,
   migrateInstances,
   generateInstanceName,
+  judgeLoginState,
 } from "../shared/sources.js";
 import { applyTheme, setThemeAttr } from "../shared/theme.js";
 import { t, getLocale } from "../shared/i18n.js";
@@ -118,6 +119,11 @@ export default {
     document.documentElement.lang = getLocale();
     await applyTheme();
     await this.loadAll();
+    // 从平台登录页切回设置页时自动重检登录态（否则「状态」行停留在出发前的旧判定）
+    window.addEventListener("focus", this.recheckLocalLogins);
+  },
+  beforeDestroy() {
+    window.removeEventListener("focus", this.recheckLocalLogins);
   },
   computed: {
     // 右上角快捷切换按钮显示「目标语言」：中文界面显示 EN，英文界面显示 中文
@@ -165,7 +171,8 @@ export default {
         (o, idx) => idx < myIdx && o.type === inst.type && o.authMode === "local"
       );
     },
-    // 登录态检测
+    // 登录态检测：收集各域 cookie 名后交给 judgeLoginState 判定
+    // （关键 cookie 优先，避免未登录时杂 cookie 造成「已登录」假阳性）
     async checkLoginStatus(inst) {
       Vue.set(this.loginStatusMap, inst.id, { state: "checking" });
       const tmpl = SOURCE_TEMPLATES[inst.type];
@@ -174,7 +181,7 @@ export default {
         return;
       }
       try {
-        let total = 0;
+        const names = [];
         const seen = new Set();
         for (const d of tmpl.cookieDomains) {
           try {
@@ -183,22 +190,27 @@ export default {
               const key = `${c.name}@${c.domain}@${c.path}`;
               if (!seen.has(key)) {
                 seen.add(key);
-                total++;
+                names.push(c.name);
               }
             }
           } catch (e) {}
         }
-        if (total > 0) {
-          Vue.set(this.loginStatusMap, inst.id, { state: "ok", count: total });
-        } else {
-          Vue.set(this.loginStatusMap, inst.id, { state: "miss" });
-        }
+        Vue.set(this.loginStatusMap, inst.id, judgeLoginState(tmpl, names));
       } catch (e) {
         Vue.set(this.loginStatusMap, inst.id, {
           state: "unknown",
           message: t("settings.checkFailed", { msg: e.message }),
         });
       }
+    },
+    // 重检所有 local 实例的登录态（页面重新聚焦 / 测试连接完成后调用，
+    // 让「状态」行跟上用户刚在平台页登录/登出的真实结果）
+    recheckLocalLogins() {
+      this.instances.forEach((inst) => {
+        const locked = this.isLocalLocked(inst);
+        const effectiveAuth = locked ? "manual" : inst.authMode;
+        if (effectiveAuth === "local") this.checkLoginStatus(inst);
+      });
     },
     // 卡片字段更新（自动保存）
     async onCardUpdate(fields, opts = {}) {
@@ -250,6 +262,11 @@ export default {
           state: "fail",
           diag: { title: t("settings.testFailTitle"), detail: e.message || String(e), advice: t("settings.testFailAdvice") },
         });
+      } finally {
+        // 测试结果与登录态联动刷新：成功 = 鉴权 cookie 确实有效（旧判定若是
+        // miss 则应转 ok）；失败也可能是刚登出，都重检一遍，不让「状态」行
+        // 停留在与测试结果矛盾的旧值
+        this.recheckLocalLogins();
       }
     },
     async addInstance() {

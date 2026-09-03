@@ -4,6 +4,7 @@ import {
   migrateInstances,
   generateInstanceName,
   getRefreshIntervalMin,
+  judgeLoginState,
   DEFAULT_REFRESH_INTERVAL_MIN,
 } from "../src/shared/sources.js";
 
@@ -135,5 +136,45 @@ describe("generateInstanceName", () => {
   it("null/undefined 安全处理", () => {
     expect(generateInstanceName("minimax", null)).toBe("MiniMax Token Plan");
     expect(generateInstanceName("minimax", undefined)).toBe("MiniMax Token Plan");
+  });
+});
+
+describe("judgeLoginState - 登录态判定", () => {
+  const keyTmpl = { loginCookieNames: ["bigmodel_token_production"] };
+
+  it("关键 cookie 在场 → ok（matchedKey）", () => {
+    const r = judgeLoginState(keyTmpl, ["csrfToken", "bigmodel_token_production", "__cf_bm"]);
+    expect(r.state).toBe("ok");
+    expect(r.matchedKey).toBe(true);
+    expect(r.count).toBe(3);
+  });
+
+  it("只有杂 cookie（未登录）→ miss：不受杂 cookie 干扰", () => {
+    // 复现火山/Cloudflare 场景：未登录也有 csrfToken/__spti 等杂 cookie
+    const r = judgeLoginState(keyTmpl, ["csrfToken", "__spti", "monitor_session_id"]);
+    expect(r.state).toBe("miss");
+    expect(r.matchedKey).toBe(false);
+  });
+
+  it("无任何 cookie → miss", () => {
+    const r = judgeLoginState(keyTmpl, []);
+    expect(r.state).toBe("miss");
+  });
+
+  it("未定义 loginCookieNames 的源回退计数判定", () => {
+    const tmpl = {};
+    expect(judgeLoginState(tmpl, ["__cf_bm"]).state).toBe("ok");
+    expect(judgeLoginState(tmpl, []).state).toBe("miss");
+    expect(judgeLoginState(tmpl, ["a", "b"]).matchedKey).toBe(false);
+  });
+
+  it("多候选关键名（chatgpt 双前缀）任一命中即 ok", () => {
+    const tmpl = { loginCookieNames: ["__Secure-next-auth.session-token", "next-auth.session-token"] };
+    expect(judgeLoginState(tmpl, ["next-auth.session-token"]).state).toBe("ok");
+    expect(judgeLoginState(tmpl, ["oai-did"]).state).toBe("miss");
+  });
+
+  it("cookieNames 缺省安全处理", () => {
+    expect(judgeLoginState(keyTmpl).state).toBe("miss");
   });
 });

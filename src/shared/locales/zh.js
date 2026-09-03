@@ -68,6 +68,7 @@ export default {
   "instance.status": "状态",
   "instance.checking": "检测中...",
   "instance.loginOk": "✓ 已检测到登录信息（{count} 条 Cookie）",
+  "instance.loggedIn": "✓ 已登录",
   "instance.loginMiss": "未检测到登录信息",
   "instance.loginNow": "立即登录",
   "instance.curl2": "curl2 (套餐名)",

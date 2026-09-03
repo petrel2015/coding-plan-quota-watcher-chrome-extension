@@ -56,9 +56,12 @@
       <span class="field-label">{{ t('instance.status') }}</span>
       <div class="login-status-content">
         <span v-if="loginChecking" class="login-status-text login-checking">{{ t('instance.checking') }}</span>
-        <span v-else-if="loginOk" class="login-status-text login-ok">
-          {{ t('instance.loginOk', { count: loginCount }) }}
-        </span>
+        <template v-else-if="loginOk">
+          <span class="login-status-text login-ok">{{ loginOkText }}</span>
+          <!-- ok 态也保留登录入口：火山/MiniMax 未定义关键 cookie，靠计数
+               判定存在「杂 cookie 误判已登录」的假阳性，误判时用户仍可直达登录页 -->
+          <el-button size="mini" plain @click="openLogin">{{ t('instance.loginNow') }}</el-button>
+        </template>
         <template v-else-if="loginMiss">
           <span class="login-status-text login-miss">{{ t('instance.loginMiss') }}</span>
           <el-button size="mini" type="primary" @click="openLogin">{{ t('instance.loginNow') }}</el-button>
@@ -209,6 +212,13 @@ export default {
     },
     loginCount() {
       return this.loginStatus[this.inst.id]?.count || 0;
+    },
+    // 关键 cookie 命中的 ok：文案直接说「已登录」；计数判定的 ok（火山/MiniMax）
+    // 只能说「检测到 N 条 Cookie」，不等于已登录
+    loginOkText() {
+      return this.loginStatus[this.inst.id]?.matchedKey
+        ? t("instance.loggedIn")
+        : t("instance.loginOk", { count: this.loginCount });
     },
     loginMessage() {
       return this.loginStatus[this.inst.id]?.message || "";

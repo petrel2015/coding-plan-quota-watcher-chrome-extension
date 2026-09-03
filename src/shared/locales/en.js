@@ -68,6 +68,7 @@ export default {
   "instance.status": "Status",
   "instance.checking": "Checking...",
   "instance.loginOk": "✓ Logged in ({count} cookies detected)",
+  "instance.loggedIn": "✓ Logged in",
   "instance.loginMiss": "No login detected",
   "instance.loginNow": "Log in",
   "instance.curl2": "curl2 (plan name)",

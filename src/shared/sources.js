@@ -76,6 +76,8 @@ export const SOURCE_TEMPLATES = {
     loginUrl: "https://chatgpt.com/auth/login",
     curlHint: "source.chatgpt.curlHint",
     curlHintUrl: "https://chatgpt.com/#settings/Usage",
+    // 登录态判定用关键 cookie（next-auth 标准登录态 cookie；无前缀兜底非安全上下文）
+    loginCookieNames: ["__Secure-next-auth.session-token", "next-auth.session-token"],
   },
   "zhipu-glm": {
     name: "source.zhipu.name",
@@ -104,6 +106,8 @@ export const SOURCE_TEMPLATES = {
     curlHintUrl: "https://bigmodel.cn/coding-plan/personal/usage",
     // 用量重置额度（重置券）：与主接口同域同鉴权，background 聚合进 _packageReset
     packageResetUrl: "https://bigmodel.cn/api/biz/customer-package-reset/list?targetType=PERSONAL",
+    // 登录态判定用关键 cookie（鉴权头即由此 cookie 映射，实测确认）
+    loginCookieNames: ["bigmodel_token_production"],
   },
 };
 
@@ -119,6 +123,21 @@ export function getRefreshIntervalMin(inst) {
   const n = Number(inst && inst.refreshIntervalMin);
   if (Number.isFinite(n) && n >= 1) return n;
   return DEFAULT_REFRESH_INTERVAL_MIN;
+}
+
+// 登录态判定（设置页「状态」行）：cookieNames 为该数据源各域下收集到的
+// cookie 名列表。定义了 loginCookieNames 的源按关键 cookie 判定——一个都
+// 不在场则即使域下有杂 cookie（Cloudflare / 统计类未登录也下发，火山登录
+// 页实测连 csrfToken 都有）也判 miss，保证「立即登录」按钮能出现；
+// 未定义关键名的源回退「有任意 cookie 即 ok」的宽松计数。
+// 返回 { state: "ok"|"miss", count, matchedKey }
+export function judgeLoginState(tmpl, cookieNames) {
+  const names = cookieNames || [];
+  if (tmpl && Array.isArray(tmpl.loginCookieNames) && tmpl.loginCookieNames.length > 0) {
+    const matchedKey = tmpl.loginCookieNames.some((n) => names.includes(n));
+    return { state: matchedKey ? "ok" : "miss", count: names.length, matchedKey };
+  }
+  return { state: names.length > 0 ? "ok" : "miss", count: names.length, matchedKey: false };
 }
 
 // 数据源展示名（翻译 name key）；未知类型回退到 "coding plan"

@@ -45,7 +45,7 @@ A Chrome browser extension (Manifest V3) that **monitors the usage quota of mult
 | **Volcengine ARK Agent Plan** | console.volcengine.com | 5h / weekly / monthly rolling windows |
 | **MiniMax Token Plan** | platform.minimaxi.com | Hourly + weekly windows |
 | **ChatGPT Codex** | chatgpt.com | Weekly + secondary window + Credits + reset prediction |
-| **Zhipu GLM** | bigmodel.cn | 5h + weekly windows |
+| **Zhipu GLM** | bigmodel.cn | 5h + weekly windows + available resets |
 
 ## Features
 

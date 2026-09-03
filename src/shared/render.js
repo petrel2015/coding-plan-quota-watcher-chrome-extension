@@ -214,11 +214,39 @@ export function normalizeData(type, data) {
     return {
       planType: (data.data && data.data.level) ? `Lv.${data.data.level}` : null,
       windows: applyWindowCaps(windows),
-      extras: [],
+      extras: zhipuResetExtras(data._packageReset),
     };
   }
 
   return null;
+}
+
+// 智谱可用重置次数（重置券）：统计 available 的张数，多张时附最早到期时间。
+// pr 缺失（老缓存 / 二次请求失败）时返回空数组，不影响主数据展示
+function zhipuResetExtras(pr) {
+  if (!pr) return [];
+  const extras = [];
+  const defs = [
+    { key: "weekResets", label: t("render.exZhipuResetWeek") },
+    { key: "fiveHourResets", label: t("render.exZhipuReset5h") },
+  ];
+  for (const def of defs) {
+    const tickets = Array.isArray(pr[def.key]) ? pr[def.key].filter((r) => r && r.available) : [];
+    let value = t("render.exZhipuResetTimes", { n: tickets.length });
+    if (tickets.length > 0) {
+      // expireTime 形如 "2026-10-01 23:59:59"（北京时间，非 ISO 格式）；
+      // WebKit 不认空格分隔的日期串，补 T 和 +08:00 保证 Safari/iOS 可解析
+      const earliest = tickets
+        .map((r) => new Date((r.expireTime || "").replace(" ", "T") + "+08:00"))
+        .filter((d) => !Number.isNaN(d.getTime()))
+        .sort((a, b) => a - b)[0];
+      if (earliest) {
+        value += t("render.exZhipuResetExpire", { date: formatDateLabel(earliest) });
+      }
+    }
+    extras.push({ label: def.label, value });
+  }
+  return extras;
 }
 
 // 跨窗口有效上限（「真实血量 vs 虚血量」）：

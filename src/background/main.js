@@ -587,6 +587,25 @@ async function fetchInstance(inst) {
     }
   }
 
+  // zhipu-glm: 额外获取 customer-package-reset 查询可用重置次数（重置券）。
+  // 与主接口同域同鉴权（authorization 头 + Cookie 均已就绪），失败不影响主数据
+  if (inst.type === "zhipu-glm" && tmpl.packageResetUrl) {
+    try {
+      const secResp = await fetchWithDnrCookie(tmpl.packageResetUrl, cookieStr, {
+        method: "GET",
+        headers,
+      });
+      if (secResp.ok) {
+        const secData = await secResp.json();
+        if (secData && secData.success !== false && secData.data) {
+          result._packageReset = secData.data;
+        }
+      }
+    } catch (e) {
+      console.log("[QuotaWatcher] package-reset fetch failed:", e.message);
+    }
+  }
+
   // minimax: 额外获取 consumption_records 查询套餐名
   if (inst.type === "minimax") {
     try {

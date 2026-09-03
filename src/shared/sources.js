@@ -102,6 +102,8 @@ export const SOURCE_TEMPLATES = {
     loginUrl: "https://bigmodel.cn/coding-plan/personal/usage",
     curlHint: "source.zhipu.curlHint",
     curlHintUrl: "https://bigmodel.cn/coding-plan/personal/usage",
+    // 用量重置额度（重置券）：与主接口同域同鉴权，background 聚合进 _packageReset
+    packageResetUrl: "https://bigmodel.cn/api/biz/customer-package-reset/list?targetType=PERSONAL",
   },
 };
 

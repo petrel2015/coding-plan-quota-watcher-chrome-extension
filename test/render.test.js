@@ -140,6 +140,42 @@ describe("normalizeData - zhipu-glm", () => {
     expect(normalizeData("zhipu-glm", { data: {} })).toBeNull();
     expect(normalizeData("zhipu-glm", {})).toBeNull();
   });
+
+  it("_packageReset 统计 available 重置券并附最早到期时间", () => {
+    const data = {
+      data: {
+        level: "pro",
+        limits: [
+          { unit: 3, number: 5, currentValue: 200, usage: 1000, percentage: 20, nextResetTime: Date.now() + 3600e3 },
+          { unit: 6, number: 1, currentValue: 5000, usage: 50000, percentage: 10, nextResetTime: Date.now() + 3600e3 },
+        ],
+      },
+      _packageReset: {
+        weekResets: [
+          { recordId: 1, expireTime: "2026-10-01 23:59:59", available: true },
+          { recordId: 2, expireTime: "2026-09-10 23:59:59", available: true },
+          { recordId: 3, expireTime: "2026-09-05 23:59:59", available: false },
+        ],
+        fiveHourResets: [],
+      },
+    };
+    const r = normalizeData("zhipu-glm", data);
+    expect(r.extras).toHaveLength(2);
+    const week = r.extras.find((e) => e.label === "可用重置（周窗口）");
+    expect(week.value).toBe("2 次（最早 9月10日 23:59 到期）");
+    const five = r.extras.find((e) => e.label === "可用重置（5小时窗口）");
+    expect(five.value).toBe("0 次");
+  });
+
+  it("无 _packageReset（老缓存/二次请求失败）时 extras 为空", () => {
+    const data = {
+      data: {
+        limits: [{ unit: 3, number: 5, currentValue: 200, usage: 1000, percentage: 20, nextResetTime: Date.now() + 3600e3 }],
+      },
+    };
+    const r = normalizeData("zhipu-glm", data);
+    expect(r.extras).toEqual([]);
+  });
 });
 
 describe("normalizeData - 未知类型", () => {

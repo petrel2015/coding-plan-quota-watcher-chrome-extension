@@ -152,6 +152,10 @@ export default {
   "render.exSignalYes": "有",
   "render.exSignalNo": "无",
   "render.exResetProb": "24h/48h 重置概率",
+  "render.exZhipuResetWeek": "可用重置（周窗口）",
+  "render.exZhipuReset5h": "可用重置（5小时窗口）",
+  "render.exZhipuResetTimes": "{n} 次",
+  "render.exZhipuResetExpire": "（最早 {date} 到期）",
   "render.minimaxMonthlyFrom": "月度会员",
   "render.minimaxMonthlyTo": "月度",
 

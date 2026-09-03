@@ -45,7 +45,7 @@
 | **火山方舟 Agent Plan** | console.volcengine.com | 5 小时 / 周 / 月三个滚动窗口 |
 | **MiniMax Token Plan** | platform.minimaxi.com | 小时窗口 + 周窗口 |
 | **ChatGPT Codex** | chatgpt.com | 周窗口 + 次级窗口 + Credits + 重置预测 |
-| **智谱 GLM** | bigmodel.cn | 5 小时窗口 + 周窗口 |
+| **智谱 GLM** | bigmodel.cn | 5 小时窗口 + 周窗口 + 可用重置次数 |
 
 ## 功能特性
 

@@ -152,6 +152,10 @@ export default {
   "render.exSignalYes": "Yes",
   "render.exSignalNo": "No",
   "render.exResetProb": "24h/48h reset prob.",
+  "render.exZhipuResetWeek": "Resets available (weekly)",
+  "render.exZhipuReset5h": "Resets available (5-hour)",
+  "render.exZhipuResetTimes": "{n}",
+  "render.exZhipuResetExpire": " (earliest expires {date})",
   "render.minimaxMonthlyFrom": "月度会员",
   "render.minimaxMonthlyTo": "Monthly",
 

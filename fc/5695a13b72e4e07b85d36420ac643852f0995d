@@ -1,0 +1,18 @@
+src/dashboard/App.vue
+  h_47dbf5e7272ced 13,84,126-129,138-139,388-407
+src/shared/locales/en.js
+  h_47dbf5e7272ced 12-13
+src/shared/locales/zh.js
+  h_47dbf5e7272ced 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fc5695a13b72e4e07b85d36420ac643852f0995d",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}

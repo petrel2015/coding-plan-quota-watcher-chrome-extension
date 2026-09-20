@@ -9,6 +9,8 @@ export default {
   "dashboard.settings": "设置",
   "dashboard.refreshAll": "全部刷新",
   "dashboard.empty": "暂无启用的数据源，请到设置页面添加",
+  "dashboard.fullscreen": "全屏",
+  "dashboard.exitFullscreen": "退出全屏",
 
   // —— dashboard/SourceCard.vue ——
   "card.refresh": "刷新",

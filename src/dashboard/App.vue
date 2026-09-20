@@ -10,6 +10,7 @@
         <el-button @click="goSettings">{{ t('dashboard.settings') }}</el-button>
         <el-button type="primary" :loading="refreshingAll" @click="refreshAll(false)">{{ t('dashboard.refreshAll') }}</el-button>
         <el-button @click="toggleLocale">{{ nextLangLabel }}</el-button>
+        <el-button @click="toggleFullscreen">{{ isFullscreen ? t('dashboard.exitFullscreen') : t('dashboard.fullscreen') }}</el-button>
       </div>
     </div>
 
@@ -80,6 +81,7 @@ export default {
       retryableIds: new Set(), // 转圈≥5s 的实例 id：显示「点击重试」链接
       timedOutIds: new Set(), // 转圈≥30s 判定超时的实例 id：停止转圈并提示失败
       now: Date.now(),
+      isFullscreen: false, // 当前是否处于全屏（Fullscreen API，进入/退出都由用户手势触发）
     };
   },
   // 定时器句柄是内部簿记，模板不依赖，不进 data()（免走响应式）。
@@ -121,6 +123,10 @@ export default {
     this.tickTimer = setInterval(() => {
       this.now = Date.now();
     }, 1000);
+    // 全屏状态也可能被浏览器 Esc 退出（不只本页按钮），监听事件同步按钮文案。
+    // 旧 Safari 只有 webkit 前缀版本，两个事件都挂
+    document.addEventListener("fullscreenchange", this.onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", this.onFullscreenChange);
     // 按各卡片自己的刷新间隔排定到点自动刷新（默认 5 分钟）
     this.scheduleAutoRefresh();
     // 进入 dashboard：数据过期（任一启用卡片缺数据或距上次尝试超过其间隔）才自动刷新，
@@ -129,6 +135,8 @@ export default {
     if (this.isDataStale()) this.refreshAll(true);
   },
   beforeDestroy() {
+    document.removeEventListener("fullscreenchange", this.onFullscreenChange);
+    document.removeEventListener("webkitfullscreenchange", this.onFullscreenChange);
     chrome.storage.onChanged.removeListener(this.onStorageChanged);
     if (this.tickTimer) clearInterval(this.tickTimer);
     for (const map of [this.retryTimers, this.fallbackTimers, this.autoTimers]) {
@@ -376,6 +384,26 @@ export default {
     async toggleLocale() {
       await chrome.storage.local.set({ locale: getLocale() === "zh" ? "en" : "zh" });
       location.reload();
+    },
+    // 全屏状态变化（进入/退出，含浏览器 Esc 退出）：同步按钮文案
+    onFullscreenChange() {
+      this.isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    },
+    // 切换全屏。进入/退出 Fullscreen API 都必须在用户手势（按钮点击）中调用；
+    // 进入失败静默忽略（如浏览器策略拦截），状态由 fullscreenchange 事件兜底同步
+    toggleFullscreen() {
+      const el = document.documentElement;
+      const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      try {
+        // 现代浏览器返回 Promise，拒绝（如浏览器策略拦截）需捕获防 unhandledrejection；
+        // 旧 webkit 前缀版本返回 undefined，判空后再挂 catch
+        const p = isFs
+          ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
+          : (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+        if (p && p.catch) p.catch((e) => console.error("[QuotaWatcher] fullscreen rejected:", e));
+      } catch (e) {
+        console.error("[QuotaWatcher] toggleFullscreen failed:", e);
+      }
     },
   },
 };

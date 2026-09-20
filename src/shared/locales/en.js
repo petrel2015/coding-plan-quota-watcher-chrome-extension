@@ -9,6 +9,8 @@ export default {
   "dashboard.settings": "Settings",
   "dashboard.refreshAll": "Refresh All",
   "dashboard.empty": "No enabled data sources. Add one in Settings.",
+  "dashboard.fullscreen": "Fullscreen",
+  "dashboard.exitFullscreen": "Exit Fullscreen",
 
   // —— dashboard/SourceCard.vue ——
   "card.refresh": "Refresh",

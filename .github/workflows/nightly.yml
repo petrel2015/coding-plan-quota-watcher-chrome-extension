@@ -1,6 +1,11 @@
-# Nightly 构建：每日定时（可手动触发）跑测试 → 构建 → 打包 zip → 上传为 Artifact
+# Nightly 构建：每日定时（可手动/按 tag 触发）跑测试 → 构建 → 打包 zip → 上传为 Artifact
 # 产物在 Actions 运行页底部下载；manifest 版本号保持仓库当前版本
-# （MV3 的 version 只允许点分整数，不能带 nightly 后缀，日期体现在文件名里）
+# （MV3 的 version 只允许点分整数，不能带 nightly 后缀，日期/SHA 体现在文件名里）
+#
+# 触发方式：
+#   - 定时：UTC 18:00（北京时间次日 02:00），构建 main 当前状态
+#   - 手动：gh workflow run nightly-build                     → 构建 main
+#            gh workflow run nightly-build --ref v1.13.5      → 构建指定 tag
 name: nightly-build
 
 on:
@@ -21,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -36,20 +43,28 @@ jobs:
       - name: 构建并打包
         run: npm run package
 
-      - name: 以 nightly 命名产物
+      - name: 命名产物（tag 构建用 tag 名，分支构建用 nightly+日期）
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           VER=$(node -p "require('./package.json').version")
           DATE=$(date -u +%Y%m%d)
           SHA=$(git rev-parse --short HEAD)
           mkdir -p nightly
-          mv "releases/coding-plan-quota-watcher-${VER}.zip" \
-             "nightly/coding-plan-quota-watcher-${VER}-nightly-${DATE}-${SHA}.zip"
+          if [ "$REF_TYPE" = "tag" ]; then
+            NAME="coding-plan-quota-watcher-${VER}-${SHA}.zip"
+          else
+            NAME="coding-plan-quota-watcher-${VER}-nightly-${DATE}-${SHA}.zip"
+          fi
+          mv "releases/coding-plan-quota-watcher-${VER}.zip" "nightly/${NAME}"
+          echo "BUILD_NAME=${NAME%.zip}" >> "$GITHUB_ENV"
           ls -la nightly/
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ format('extension-nightly-{0}', github.run_number) }}
+          name: ${{ env.BUILD_NAME }}
           path: nightly/*.zip
           retention-days: 30
           if-no-files-found: error

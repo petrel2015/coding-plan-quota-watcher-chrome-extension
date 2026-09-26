@@ -5,6 +5,7 @@ import {
   generateInstanceName,
   getRefreshIntervalMin,
   judgeLoginState,
+  serializeCookieHeader,
   DEFAULT_REFRESH_INTERVAL_MIN,
 } from "../src/shared/sources.js";
 
@@ -176,5 +177,36 @@ describe("judgeLoginState - 登录态判定", () => {
 
   it("cookieNames 缺省安全处理", () => {
     expect(judgeLoginState(keyTmpl).state).toBe("miss");
+  });
+
+  it("mimo：serviceToken 在场 → ok；仅有 userId 等杂 cookie → miss", () => {
+    const tmpl = { loginCookieNames: ["api-platform_serviceToken"] };
+    expect(judgeLoginState(tmpl, ["userId", "api-platform_serviceToken", "api-platform_ph"]).state).toBe("ok");
+    expect(judgeLoginState(tmpl, ["userId", "api-platform_ph", "api-platform_slh"]).state).toBe("miss");
+  });
+});
+
+describe("serializeCookieHeader - 本地模式 Cookie 头引号序列化", () => {
+  it("纯数字 / hex / JWT 类值不加引号（与浏览器行为一致）", () => {
+    const out = serializeCookieHeader([
+      { name: "userId", value: "40534809" },
+      { name: "csrfToken", value: "f40d3d6f0add28333f50954a1ffd6af8" },
+      { name: "bigmodel_token_production", value: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc_-123" },
+    ]);
+    expect(out).toBe("userId=40534809; csrfToken=f40d3d6f0add28333f50954a1ffd6af8; bigmodel_token_production=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc_-123");
+  });
+
+  it("base64 值（含 +/= 等）补回双引号——mimo serviceToken 场景", () => {
+    const out = serializeCookieHeader([
+      { name: "api-platform_serviceToken", value: "0aGv1vYTmk+abc/XYZ=" },
+      { name: "userId", value: "40534809" },
+    ]);
+    expect(out).toBe('api-platform_serviceToken="0aGv1vYTmk+abc/XYZ="; userId=40534809');
+  });
+
+  it("空列表与缺省安全处理", () => {
+    expect(serializeCookieHeader([])).toBe("");
+    expect(serializeCookieHeader(null)).toBe("");
+    expect(serializeCookieHeader(undefined)).toBe("");
   });
 });

@@ -148,7 +148,9 @@ export function diagnoseError(err, options = {}) {
         category: "auth_expired",
         title: t("diag.expired401.title"),
         detail: isTokenPhase ? t("diag.expired401.detailToken") : sliceBody(message),
-        advice: reauthAdvice(authMode),
+        // local 模式 401 的常见误区：登录发生在隐身窗口（cookie 不落盘、扩展
+        // 读不到），提示里点明，避免「我明明登录了还 401」的来回排查
+        advice: authMode === "manual" ? reauthAdvice(authMode) : t("diag.reauthLocal401"),
         authMode,
       };
     }

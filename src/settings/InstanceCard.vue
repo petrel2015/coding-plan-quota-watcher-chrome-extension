@@ -177,9 +177,17 @@ export default {
         (o, idx) => idx < myIdx && o.type === this.localType && o.authMode === "local"
       );
     },
-    effectiveAuthMode() {
-      // 锁定时强制 manual；否则用本地编辑态
-      return this.localLocked ? "manual" : this.localAuthMode;
+    effectiveAuthMode: {
+      // 锁定时强制 manual；否则用本地编辑态。
+      // 带 setter：el-select 的 v-model 绑在此 computed 上，选中项的写入
+      // 落回 localAuthMode——无 setter 时写入被 Vue 静默丢弃，下拉框显示
+      // 新选项但 collectFields 仍发旧值，表现为「选手动后被弹回自动」
+      get() {
+        return this.localLocked ? "manual" : this.localAuthMode;
+      },
+      set(v) {
+        this.localAuthMode = v;
+      },
     },
     curlPlaceholder() {
       const k = this.template?.curlHint;

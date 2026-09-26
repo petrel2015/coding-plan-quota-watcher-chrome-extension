@@ -46,6 +46,7 @@ A Chrome browser extension (Manifest V3) that **monitors the usage quota of mult
 | **MiniMax Token Plan** | platform.minimaxi.com | Hourly + weekly windows |
 | **ChatGPT Codex** | chatgpt.com | Weekly + secondary window + Credits + reset prediction |
 | **Zhipu GLM** | bigmodel.cn | 5h + weekly windows + available resets |
+| **Xiaomi MiMo Token Plan** | platform.xiaomimimo.com | Monthly plan window + compensation credits |
 
 ## Features
 
@@ -160,6 +161,7 @@ Click the "Settings" button in the top-right corner of the Dashboard to open the
 | MiniMax | `remains_percent` (+ optional `consumption_records` for the plan name) |
 | ChatGPT | `wham/usage` |
 | Zhipu GLM | `quota/limit` |
+| Xiaomi MiMo | `tokenPlan/usage` |
 
 ## Development
 

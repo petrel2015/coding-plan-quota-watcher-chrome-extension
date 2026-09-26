@@ -178,6 +178,79 @@ describe("normalizeData - zhipu-glm", () => {
   });
 });
 
+describe("normalizeData - mimo", () => {
+  // 与线上响应同构：套餐桶 + 补偿桶，周期结束时间为北京时间字符串
+  const mimoData = (overrides = {}) => ({
+    code: 0,
+    data: {
+      usage: {
+        percent: 2.5,
+        items: [
+          { name: "plan_total_token", used: 100, limit: 4000, percent: 2.5 },
+          { name: "compensation_total_token", used: 50, limit: 1000, percent: 5 },
+        ],
+      },
+    },
+    _planDetail: { planName: "Lite", currentPeriodEnd: "2026-10-22 23:59:59" },
+    ...overrides,
+  });
+
+  it("limit>0 的桶（套餐+补偿）求和；重置点解析北京时间周期结束", () => {
+    const r = normalizeData("mimo", mimoData());
+    expect(r.planType).toBe("Lite");
+    expect(r.windows).toHaveLength(1);
+    expect(r.windows[0].label).toBe("月窗口");
+    expect(r.windows[0].used).toBe(150);
+    expect(r.windows[0].quota).toBe(5000);
+    expect(r.windows[0].remaining).toBe(4850);
+    expect(r.windows[0].usedPct).toBeCloseTo(3, 5);
+    // "2026-10-22 23:59:59" 北京时间 = UTC 15:59:59
+    expect(r.windows[0].resetMs).toBe(Date.UTC(2026, 9, 22, 15, 59, 59));
+    // 周期起点 = 结束时间回退一个日历月（北京墙钟对齐），供消耗速度预测
+    expect(r.windows[0].startMs).toBe(Date.UTC(2026, 8, 22, 15, 59, 59));
+  });
+
+  it("limit=0 的桶（未发放的补偿额度）不计入", () => {
+    const r = normalizeData("mimo", mimoData({
+      data: {
+        usage: {
+          percent: 0.03,
+          items: [
+            { name: "plan_total_token", used: 124682040, limit: 4100000000, percent: 0.03 },
+            { name: "compensation_total_token", used: 0, limit: 0, percent: 0 },
+          ],
+        },
+      },
+    }));
+    expect(r.windows[0].used).toBe(124682040);
+    expect(r.windows[0].quota).toBe(4100000000);
+    // 补偿桶无上限 → 不输出补偿剩余
+    expect(r.extras).toEqual([]);
+  });
+
+  it("补偿桶有独立上限时 extras 输出剩余", () => {
+    const r = normalizeData("mimo", mimoData());
+    expect(r.extras).toContainEqual({ label: "补偿额度剩余", value: "950.0" });
+  });
+
+  it("无 _planDetail（二次请求失败/老缓存）时 planType 为 null、resetMs 为 0", () => {
+    const data = mimoData();
+    delete data._planDetail;
+    const r = normalizeData("mimo", data);
+    expect(r.planType).toBeNull();
+    expect(r.windows[0].resetMs).toBe(0);
+    expect(r.windows[0].startMs).toBeNull();
+  });
+
+  it("无 usage / 无有效桶返回 null", () => {
+    expect(normalizeData("mimo", {})).toBeNull();
+    expect(normalizeData("mimo", { data: {} })).toBeNull();
+    expect(normalizeData("mimo", {
+      data: { usage: { percent: 0, items: [{ name: "plan_total_token", used: 0, limit: 0, percent: 0 }] } },
+    })).toBeNull();
+  });
+});
+
 describe("normalizeData - 未知类型", () => {
   it("返回 null", () => {
     expect(normalizeData("unknown", { foo: "bar" })).toBeNull();

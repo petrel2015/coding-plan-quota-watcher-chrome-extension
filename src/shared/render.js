@@ -218,7 +218,80 @@ export function normalizeData(type, data) {
     };
   }
 
+  if (type === "mimo") {
+    const usage = data.data && data.data.usage;
+    if (!usage || !Array.isArray(usage.items)) return null;
+    // 周期消耗分桶计数：plan_total_token（套餐额度）+ compensation_total_token
+    // （补偿额度，独立上限）。只累计 limit>0 的桶，全部为 0 视为无有效套餐
+    let used = 0;
+    let quota = 0;
+    for (const it of usage.items) {
+      const limit = Number(it && it.limit) || 0;
+      if (limit > 0) {
+        used += Number(it && it.used) || 0;
+        quota += limit;
+      }
+    }
+    if (quota <= 0) return null;
+    const remaining = Math.max(0, quota - used);
+    // 重置点 = 订阅周期结束时间（_planDetail 缺失时为 0，卡片不显示倒计时）
+    const resetMs = mimoPeriodEndMs(data._planDetail);
+    const extras = [];
+    // 补偿桶有独立上限时单独展示剩余
+    const comp = usage.items.find((it) => it && it.name === "compensation_total_token");
+    const compLimit = Number(comp && comp.limit) || 0;
+    if (compLimit > 0) {
+      const compRem = Math.max(0, compLimit - (Number(comp && comp.used) || 0));
+      extras.push({ label: t("render.exMimoCompensation"), value: formatNum(compRem) });
+    }
+    return {
+      planType: (data._planDetail && data._planDetail.planName) || null,
+      windows: applyWindowCaps([
+        {
+          label: t("render.winMonth"),
+          usedPct: (used / quota) * 100,
+          used,
+          quota,
+          remaining,
+          detail: t("render.detailRemaining", {
+            used: formatNum(used),
+            quota: formatNum(quota),
+            remaining: formatNum(remaining),
+          }),
+          resetMs,
+          startMs: resetMs ? mimoPeriodStartMs(resetMs) : null,
+        },
+      ]),
+      extras,
+    };
+  }
+
   return null;
+}
+
+// mimo 订阅周期结束时间：形如 "2026-10-22 23:59:59"（北京时间，非 ISO 格式）。
+// WebKit 不认空格分隔的日期串，补 T 和 +08:00 保证 Safari/iOS 可解析；缺失返回 0
+function mimoPeriodEndMs(detail) {
+  const s = detail && detail.currentPeriodEnd;
+  if (!s) return 0;
+  const d = new Date(String(s).replace(" ", "T") + "+08:00");
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+// mimo 周期起点：套餐按自然月订阅（periodInterval=1），把结束时间回退一个
+// 日历月得到对齐起点（10-22 23:59:59 → 9-22 23:59:59），供消耗速度预测用。
+// 在 UTC 分量上做回退（+08:00 解析出的绝对时刻，其 UTC 分量即北京墙钟），
+// 不依赖运行环境的本地时区
+function mimoPeriodStartMs(resetMs) {
+  const d = new Date(resetMs);
+  return Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth() - 1,
+    d.getUTCDate(),
+    d.getUTCHours(),
+    d.getUTCMinutes(),
+    d.getUTCSeconds()
+  );
 }
 
 // 智谱可用重置次数（重置券）：统计 available 的张数，多张时附最早到期时间。

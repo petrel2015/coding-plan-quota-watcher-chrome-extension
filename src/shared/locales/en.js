@@ -101,6 +101,7 @@ export default {
   "diag.chatgptExpired.extra": "ChatGPT session has expired",
   "diag.reauthManual": "Cookie expired or incomplete. Re-copy from DevTools → Network → Copy as cURL.",
   "diag.reauthLocal": "Session expired. Please log in to the platform again.",
+  "diag.reauthLocal401": "Session expired. Please log in to the platform again. If you are sure you are logged in but still see 401, the login may have happened in an Incognito window — Incognito cookies never touch disk and are invisible to the extension. Sign in from a normal window.",
   "diag.badResponse.extra": "usually an expired session",
   "diag.expired401.title": "Login expired (401)",
   "diag.expired401.detailToken": "Auth endpoint returned 401.",
@@ -159,6 +160,7 @@ export default {
   "render.exZhipuReset5h": "Resets available (5-hour)",
   "render.exZhipuResetTimes": "{n}",
   "render.exZhipuResetExpire": " (earliest expires {date})",
+  "render.exMimoCompensation": "Compensation credits left",
   "render.minimaxMonthlyFrom": "月度会员",
   "render.minimaxMonthlyTo": "Monthly",
 
@@ -181,14 +183,17 @@ export default {
   "source.minimax.name": "MiniMax Token Plan",
   "source.chatgpt.name": "ChatGPT Codex Usage",
   "source.zhipu.name": "Zhipu GLM Usage",
+  "source.mimo.name": "Xiaomi MiMo Token Plan",
   "source.volcengine.defaultName": "Volcengine Ark",
   "source.minimax.defaultName": "MiniMax",
   "source.zhipu.defaultName": "Zhipu GLM",
+  "source.mimo.defaultName": "Xiaomi MiMo",
   "source.volcengine.curlHint": "DevTools → Network → find GetAgentPlanAFPUsage → right-click → Copy as cURL",
   "source.minimax.curlHint": "DevTools → Network → find remains_percent → right-click → Copy as cURL",
   "source.minimax.curl2Hint": "DevTools → Network → find consumption_records → right-click → Copy as cURL (for plan name, optional)",
   "source.chatgpt.curlHint": "ChatGPT Settings/Usage → DevTools → Network → find wham/usage → right-click → Copy as cURL",
   "source.zhipu.curlHint": "Zhipu open platform → Personal center → Quota usage → DevTools → Network → find quota/limit → right-click → Copy as cURL",
+  "source.mimo.curlHint": "Xiaomi MiMo open platform → Console → Plan management → DevTools → Network → find tokenPlan/usage → right-click → Copy as cURL",
 
   // —— common: parenthesised wrap (full-width vs half-width) ——
   "common.paren": " ({s})",

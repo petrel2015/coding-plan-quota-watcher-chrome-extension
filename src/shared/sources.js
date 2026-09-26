@@ -109,10 +109,34 @@ export const SOURCE_TEMPLATES = {
     // 登录态判定用关键 cookie（鉴权头即由此 cookie 映射，实测确认）
     loginCookieNames: ["bigmodel_token_production"],
   },
+  "mimo": {
+    name: "source.mimo.name",
+    type: "mimo",
+    url: "https://platform.xiaomimimo.com/api/v1/tokenPlan/usage",
+    method: "GET",
+    body: null,
+    cookieDomains: ["platform.xiaomimimo.com", ".platform.xiaomimimo.com", "xiaomimimo.com", ".xiaomimimo.com"],
+    csrfCookieName: null,
+    headers: {
+      "accept": "*/*",
+      "accept-language": "zh",
+      "content-type": "application/json",
+      "referer": "https://platform.xiaomimimo.com/console/plan-manage",
+      "x-timezone": "Asia/Shanghai",
+    },
+    loginUrl: "https://platform.xiaomimimo.com/console/plan-manage",
+    curlHint: "source.mimo.curlHint",
+    curlHintUrl: "https://platform.xiaomimimo.com/console/plan-manage",
+    // 套餐名 + 订阅周期结束时间（月度重置点）：与主接口同域同鉴权，
+    // background 聚合进 _planDetail
+    planDetailUrl: "https://platform.xiaomimimo.com/api/v1/tokenPlan/detail",
+    // 登录态判定用关键 cookie（小米账号 serviceToken，未登录不下发；实测确认）
+    loginCookieNames: ["api-platform_serviceToken"],
+  },
 };
 
 // 类型顺序（settings 下拉 / 默认配置用）
-export const SOURCE_ORDER = ["volcengine-ark", "minimax", "chatgpt-codex", "zhipu-glm"];
+export const SOURCE_ORDER = ["volcengine-ark", "minimax", "chatgpt-codex", "zhipu-glm", "mimo"];
 
 // 每卡片自动刷新间隔（分钟）：默认值 + 设置页可选项
 export const DEFAULT_REFRESH_INTERVAL_MIN = 5;
@@ -138,6 +162,19 @@ export function judgeLoginState(tmpl, cookieNames) {
     return { state: matchedKey ? "ok" : "miss", count: names.length, matchedKey };
   }
   return { state: names.length > 0 ? "ok" : "miss", count: names.length, matchedKey: false };
+}
+
+// 本地模式拼 Cookie 头：chrome.cookies 返回的 value 会被 Chromium 剥掉
+// 首尾双引号，而部分平台（小米 MiMo 的 serviceToken）服务端按「带引号的
+// 原文」校验，剥了引号即 401（实测：同 token 带引号 200 / 去引号 401）。
+// 浏览器发包时会给含特殊字符的值重新加引号，这里按同一策略补回：
+// 值只含 [A-Za-z0-9._-] 时不加（数字 id / hex / JWT 均在此列，与浏览器
+// 行为一致），其余（base64 的 +/= 等）包裹双引号
+const COOKIE_SAFE_VALUE_RE = /^[A-Za-z0-9._-]*$/;
+export function serializeCookieHeader(cookies) {
+  return (cookies || [])
+    .map((c) => `${c.name}=${COOKIE_SAFE_VALUE_RE.test(c.value) ? c.value : `"${c.value}"`}`)
+    .join("; ");
 }
 
 // 数据源展示名（翻译 name key）；未知类型回退到 "coding plan"
@@ -168,6 +205,14 @@ export const DEFAULT_INSTANCES = [
     id: "zhipu-glm-1",
     name: `${t("source.zhipu.defaultName")} #1`,
     type: "zhipu-glm",
+    enabled: true,
+    authMode: "local",
+    manualCurl: "",
+  },
+  {
+    id: "mimo-1",
+    name: `${t("source.mimo.defaultName")} #1`,
+    type: "mimo",
     enabled: true,
     authMode: "local",
     manualCurl: "",

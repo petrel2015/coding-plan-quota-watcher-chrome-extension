@@ -101,6 +101,7 @@ export default {
   "diag.chatgptExpired.extra": "ChatGPT 会话已过期",
   "diag.reauthManual": "Cookie 已过期或不完整，请重新从 DevTools → Network → Copy as cURL 粘贴",
   "diag.reauthLocal": "登录态已失效，请重新登录该平台",
+  "diag.reauthLocal401": "登录态已失效，请重新登录该平台。若确认已登录仍报 401，请检查登录是否发生在隐身窗口——隐身 Cookie 不落盘、扩展读不到，需在普通窗口登录",
   "diag.badResponse.extra": "通常是登录态失效",
   "diag.expired401.title": "登录已过期（401）",
   "diag.expired401.detailToken": "鉴权接口返回 401",
@@ -159,6 +160,7 @@ export default {
   "render.exZhipuReset5h": "可用重置（5小时窗口）",
   "render.exZhipuResetTimes": "{n} 次",
   "render.exZhipuResetExpire": "（最早 {date} 到期）",
+  "render.exMimoCompensation": "补偿额度剩余",
   "render.minimaxMonthlyFrom": "月度会员",
   "render.minimaxMonthlyTo": "月度",
 
@@ -181,14 +183,17 @@ export default {
   "source.minimax.name": "MiniMax Token Plan",
   "source.chatgpt.name": "ChatGPT Codex 用量",
   "source.zhipu.name": "智谱 GLM 用量",
+  "source.mimo.name": "小米 MiMo Token Plan",
   "source.volcengine.defaultName": "火山方舟",
   "source.minimax.defaultName": "MiniMax",
   "source.zhipu.defaultName": "智谱 GLM",
+  "source.mimo.defaultName": "小米 MiMo",
   "source.volcengine.curlHint": "DevTools -> Network -> 找 GetAgentPlanAFPUsage 请求 -> 右键 Copy as cURL",
   "source.minimax.curlHint": "DevTools -> Network -> 找 remains_percent 请求 -> 右键 Copy as cURL",
   "source.minimax.curl2Hint": "DevTools -> Network -> 找 consumption_records 请求 -> 右键 Copy as cURL（用于获取套餐名，可选）",
   "source.chatgpt.curlHint": "ChatGPT 设置页 Usage (Settings/Usage) -> DevTools -> Network -> 找 wham/usage 请求 -> 右键 Copy as cURL",
   "source.zhipu.curlHint": "智谱开放平台 -> 个人中心 -> 额度用量 -> DevTools -> Network -> 找 quota/limit 请求 -> 右键 Copy as cURL",
+  "source.mimo.curlHint": "小米 MiMo 开放平台 -> 控制台 -> 套餐管理 -> DevTools -> Network -> 找 tokenPlan/usage 请求 -> 右键 Copy as cURL",
 
   // —— 通用：括号包裹（中英文括号不同）——
   "common.paren": "（{s}）",

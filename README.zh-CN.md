@@ -46,6 +46,7 @@
 | **MiniMax Token Plan** | platform.minimaxi.com | 小时窗口 + 周窗口 |
 | **ChatGPT Codex** | chatgpt.com | 周窗口 + 次级窗口 + Credits + 重置预测 |
 | **智谱 GLM** | bigmodel.cn | 5 小时窗口 + 周窗口 + 可用重置次数 |
+| **小米 MiMo Token Plan** | platform.xiaomimimo.com | 月度套餐窗口 + 补偿额度 |
 
 ## 功能特性
 
@@ -160,6 +161,7 @@ iOS Safari 版在独立仓库 **[coding-plan-quota-watcher-apple](https://github
 | MiniMax | `remains_percent`（+ 可选 `consumption_records` 获取套餐名） |
 | ChatGPT | `wham/usage` |
 | 智谱 GLM | `quota/limit` |
+| 小米 MiMo | `tokenPlan/usage` |
 
 ## 开发
 

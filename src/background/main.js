@@ -2,7 +2,7 @@
 // 从 storage 读取实例配置，动态拉取数据，缓存到 storage
 // 数据源模板从 shared/sources.js 引入（单一来源，与 Vue 组件共用）
 
-import { SOURCE_TEMPLATES, DEFAULT_INSTANCES, migrateInstances, getRefreshIntervalMin } from "../shared/sources.js";
+import { SOURCE_TEMPLATES, DEFAULT_INSTANCES, migrateInstances, getRefreshIntervalMin, serializeCookieHeader } from "../shared/sources.js";
 import { diagnoseError } from "../shared/diagnose.js";
 import { setLocale, SUPPORTED_LOCALES } from "../shared/i18n.js";
 
@@ -431,8 +431,12 @@ async function fetchInstance(inst) {
   let csrfToken = "";
   let extraHeaders = {};
   let authToken = "";
+  // 采集诊断：记录各查询返回的 cookie 数量，随 401 错误落库（[jar: ...]），
+  // 用于区分「chrome.cookies 读不到」与「服务端拒绝已带上的 cookie」
+  let jarDebug = "";
 
   if (inst.authMode === "manual" && inst.manualCurl) {
+    jarDebug = "manual";
     // 手动粘贴 curl 模式：从 curl 命令中提取 URL、Cookie、csrfToken、body
     const parsed = parseCurl(inst.manualCurl);
     cookieStr = parsed.cookieStr;
@@ -479,19 +483,26 @@ async function fetchInstance(inst) {
     // 本地 cookie 模式：用 chrome.cookies API 读取
     const allCookies = [];
     const seen = new Set();
-
-    // url 方式
-    const cookiesByUrl = await chrome.cookies.getAll({ url: tmpl.url });
-    for (const c of cookiesByUrl) {
-      const key = `${c.name}@${c.domain}@${c.path}`;
-      if (!seen.has(key)) { seen.add(key); allCookies.push(c); }
-    }
-    // domain 方式
-    for (const d of tmpl.cookieDomains) {
-      const cookies = await chrome.cookies.getAll({ domain: d });
+    const jarLog = [];
+    const collect = (cookies) => {
       for (const c of cookies) {
         const key = `${c.name}@${c.domain}@${c.path}`;
         if (!seen.has(key)) { seen.add(key); allCookies.push(c); }
+      }
+    };
+
+    // url 方式
+    const cookiesByUrl = await chrome.cookies.getAll({ url: tmpl.url });
+    collect(cookiesByUrl);
+    jarLog.push(`url=${cookiesByUrl.length}`);
+    // domain 方式
+    for (const d of tmpl.cookieDomains) {
+      try {
+        const cookies = await chrome.cookies.getAll({ domain: d });
+        collect(cookies);
+        jarLog.push(`${d}=${cookies.length}`);
+      } catch (e) {
+        jarLog.push(`${d}=ERR:${(e && e.message) || e}`);
       }
     }
     // partitioned cookies
@@ -499,15 +510,44 @@ async function fetchInstance(inst) {
       for (const d of tmpl.cookieDomains) {
         try {
           const cookies = await chrome.cookies.getAll({ domain: d, partitionKey: tmpl.partitionKey });
-          for (const c of cookies) {
-            const key = `${c.name}@${c.domain}@${c.path}`;
-            if (!seen.has(key)) { seen.add(key); allCookies.push(c); }
-          }
+          collect(cookies);
+          if (cookies.length) jarLog.push(`${d}@part=${cookies.length}`);
         } catch (e) {}
       }
     }
+    // 逐个 cookie store（含隐身 store，若扩展被允许）兜底查询：
+    // session 级 SSO cookie 在部分 Chrome 版本上可能不在默认查询视野内
+    try {
+      const stores = await chrome.cookies.getAllCookieStores();
+      for (const st of stores) {
+        for (const d of tmpl.cookieDomains) {
+          try {
+            const cookies = await chrome.cookies.getAll({ domain: d, storeId: st.id });
+            if (cookies.length) {
+              collect(cookies);
+              jarLog.push(`${d}@store${st.id}=${cookies.length}`);
+            }
+          } catch (e) {}
+        }
+      }
+      jarLog.push(`stores=${stores.map((s) => s.id).join("/")}`);
+    } catch (e) {
+      jarLog.push(`stores=ERR:${(e && e.message) || e}`);
+    }
+    jarDebug = jarLog.join(", ");
 
-    cookieStr = allCookies.map((c) => `${c.name}=${c.value}`).join("; ");
+    // jar 内容可见性诊断：把该域下 API 读到的 key=value 打进 SW console
+    // （用户排查用；只在 local 模式打印）
+    if (allCookies.length) {
+      const dump = allCookies.map((c) => `${c.name}=${c.value}`).join("; ");
+      console.log(`[QuotaWatcher] ${inst.id} jar dump: ${dump}`);
+    } else {
+      console.log(`[QuotaWatcher] ${inst.id} jar dump: EMPTY for [${tmpl.cookieDomains.join(", ")}] (${jarDebug})`);
+    }
+
+    // 拼 Cookie 头：chrome.cookies 的 value 被剥了首尾引号，含特殊字符的值
+    // 按浏览器行为补回引号（见 sources.js serializeCookieHeader 注释）
+    cookieStr = serializeCookieHeader(allCookies);
 
     if (tmpl.csrfCookieName) {
       const csrfCookie = allCookies.find((c) => c.name === tmpl.csrfCookieName);
@@ -542,6 +582,19 @@ async function fetchInstance(inst) {
     }
   }
 
+  // 可观测性：SW console 打出本次请求携带的 cookie（只打名与是否补引号，不打值），
+  // 排查「已登录仍 401」时可直接看出带没带鉴权 cookie、引号序列化是否生效
+  const cookieNamesLog = cookieStr
+    ? cookieStr.split(";").map((s) => {
+        const kv = s.trim();
+        const eq = kv.indexOf("=");
+        const name = kv.slice(0, eq);
+        const val = kv.slice(eq + 1);
+        return val.startsWith('"') ? `${name}(q)` : name;
+      }).join(", ")
+    : "(none)";
+  console.log(`[QuotaWatcher] ${inst.id} GET ${tmpl.url} | cookies: ${cookieNamesLog}`);
+
   // 构建请求头
   const headers = { ...tmpl.headers };
   if (csrfToken) headers["x-csrf-token"] = csrfToken;
@@ -556,12 +609,38 @@ async function fetchInstance(inst) {
   const fetchOpts = { method: tmpl.method, headers };
   if (tmpl.body) fetchOpts.body = JSON.stringify(tmpl.body);
 
-  const resp = await fetchWithDnrCookie(tmpl.url, cookieStr, fetchOpts);
+  // 第一跳：读 cookie + DNR 注入（常规路径）。
+  // 实测（Chrome 153）：部分平台的 session 级 SSO cookie（如小米 MiMo）对
+  // chrome.cookies 完全不可见（url/domain 全查返回 0 条），但 SW fetch 会
+  // 自动附带它们——第二跳用 credentials:include 让浏览器自己带 cookie 重试，
+  // 行为与页面发出的请求一致（headless 实验证实附带完整且保留引号）
+  let resp = await fetchWithDnrCookie(tmpl.url, cookieStr, fetchOpts);
+  let viaBrowserCredentials = false;
+  if (!resp.ok && inst.authMode !== "manual") {
+    console.log(`[QuotaWatcher] ${inst.id} DNR path got ${resp.status}, retrying with browser-attached cookies`);
+    resp = await fetchWithTimeout(tmpl.url, { ...fetchOpts, credentials: "include" });
+    viaBrowserCredentials = resp.ok;
+  }
   if (!resp.ok) {
     const bodyText = await resp.text().catch(() => "");
-    throw new Error(`HTTP ${resp.status}: ${bodyText.substring(0, 200)}`);
+    // 错误信息带上「实际注入的 cookie 名单」：(none)=API 没读到 cookie；
+    // 带 (q) 后缀=该值被补了引号。诊断详情落库后可直接定位是采集空还是
+    // 服务端拒绝（格式保持 "HTTP <status>: ..."，diagnoseError 依赖冒号位置）
+    const sentLog = cookieStr
+      ? cookieStr.split(";").map((s) => {
+          const kv = s.trim();
+          const eq = kv.indexOf("=");
+          return kv.slice(0, eq) + (kv.slice(eq + 1).startsWith('"') ? "(q)" : "");
+        }).join(",")
+      : "(none)";
+    throw new Error(`HTTP ${resp.status}: [jar: ${jarDebug} | sent: ${sentLog}] GET ${tmpl.url} — ${bodyText.substring(0, 120)}`);
   }
   const result = await resp.json();
+  // 采集诊断随数据落库（成功记录也带上，便于对照）
+  if (result && typeof result === "object") {
+    result._jarDebug = jarDebug;
+    if (viaBrowserCredentials) result._viaFallback = "browser-credentials";
+  }
 
   // 业务层错误：部分平台（如智谱）鉴权失败时仍返回 HTTP 200，body 形如
   // {"code":1001,"msg":"Header中未收到Authorization参数...","success":false}。
@@ -569,6 +648,12 @@ async function fetchInstance(inst) {
   // 否则会流入字段校验被误报成「数据格式解析异常」
   if (result && typeof result === "object" && result.success === false && result.code != null) {
     throw new Error(`API business error ${result.code}: ${result.msg || ""}`);
+  }
+
+  // mimo：业务错误以 HTTP 200 + code!=0 返回（正常响应恒为 code:0；登录失效
+  // 走 HTTP 401 已由状态码路径覆盖），这里兜底其余非零错误码
+  if (inst.type === "mimo" && result && typeof result === "object" && result.code != null && result.code !== 0) {
+    throw new Error(`API business error ${result.code}: ${result.message || ""}`);
   }
 
   // chatgpt-codex: 额外获取 codex-reset.com 重置预测（公开 API，无需鉴权）
@@ -603,6 +688,25 @@ async function fetchInstance(inst) {
       }
     } catch (e) {
       console.log("[QuotaWatcher] package-reset fetch failed:", e.message);
+    }
+  }
+
+  // mimo: 额外获取 tokenPlan/detail 查询套餐名与订阅周期结束时间（月度重置点）。
+  // 与主接口同域同鉴权（Cookie 已就绪），失败不影响主数据
+  if (inst.type === "mimo" && tmpl.planDetailUrl) {
+    try {
+      const secResp = await fetchWithDnrCookie(tmpl.planDetailUrl, cookieStr, {
+        method: "GET",
+        headers,
+      });
+      if (secResp.ok) {
+        const secData = await secResp.json();
+        if (secData && secData.code === 0 && secData.data) {
+          result._planDetail = secData.data;
+        }
+      }
+    } catch (e) {
+      console.log("[QuotaWatcher] plan-detail fetch failed:", e.message);
     }
   }
 
@@ -692,6 +796,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+// 提取 curl 中某个 flag 的值：外层引号可为 ' 或 "，值内允许出现另一种引号
+// （mimo 等 cookie 值本身带引号：-b 'k="v1"; k2="v2"'，旧的 [^'"]+ 会在值内
+// 第一个引号处截断）；无引号时取到空白为止。返回 undefined 表示 flag 不存在
+function extractFlagValue(str, flag) {
+  const re = new RegExp(`(?:^|\\s)${flag}\\s+('([^']*)'|"([^"]*)"|([^'\\s][^\\s]*))`);
+  const m = str.match(re);
+  if (!m) return undefined;
+  return m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4];
+}
+
 // 从 curl 命令中提取 URL、headers、cookie、body
 function parseCurl(curlStr) {
   const result = {
@@ -701,14 +815,21 @@ function parseCurl(curlStr) {
     body: undefined,
   };
 
-  // 提取 URL（第一个引号中的内容）
-  const urlMatch = curlStr.match(/curl\s+['"]([^'"]+)['"]/);
-  if (urlMatch) result.url = urlMatch[1];
+  // 提取 URL：--url 'x' / --url "x"，回退 curl 后的位置参数
+  const url = extractFlagValue(curlStr, "--url");
+  if (url !== undefined) {
+    result.url = url;
+  } else {
+    const posMatch = curlStr.match(/curl\s+('([^']*)'|"([^"]*)")/);
+    if (posMatch) {
+      result.url = posMatch[2] !== undefined ? posMatch[2] : posMatch[3];
+    }
+  }
 
   // 提取 -H headers
-  const headerMatches = curlStr.matchAll(/-H\s+['"]([^'"]+)['"]/g);
+  const headerMatches = curlStr.matchAll(/(?:^|\s)-H\s+('([^']*)'|"([^"]*)")/g);
   for (const m of headerMatches) {
-    const headerStr = m[1];
+    const headerStr = m[2] !== undefined ? m[2] : m[3] || "";
     const colonIdx = headerStr.indexOf(":");
     if (colonIdx === -1) continue;
     const key = headerStr.substring(0, colonIdx).trim().toLowerCase();
@@ -720,19 +841,19 @@ function parseCurl(curlStr) {
     }
   }
 
-  // 提取 -b cookie（备选）
+  // 提取 -b / --cookie（备选）
   if (!result.cookieStr) {
-    const bMatch = curlStr.match(/-b\s+['"]([^'"]+)['"]/);
-    if (bMatch) result.cookieStr = bMatch[1];
+    const cookie = extractFlagValue(curlStr, "(?:--cookie|-b)");
+    if (cookie !== undefined) result.cookieStr = cookie;
   }
 
   // 提取 --data-raw / --data / -d
-  const dataMatch = curlStr.match(/(?:--data-raw|--data|-d)\s+['"]([^'"]*)['"]/);
-  if (dataMatch) {
+  const data = extractFlagValue(curlStr, "(?:--data-raw|--data|-d)");
+  if (data !== undefined) {
     try {
-      result.body = JSON.parse(dataMatch[1]);
+      result.body = JSON.parse(data);
     } catch {
-      result.body = dataMatch[1];
+      result.body = data;
     }
   }
 

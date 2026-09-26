@@ -183,17 +183,27 @@ export default {
       try {
         const names = [];
         const seen = new Set();
-        for (const d of tmpl.cookieDomains) {
-          try {
-            const cookies = await chrome.cookies.getAll({ domain: d });
-            for (const c of cookies) {
-              const key = `${c.name}@${c.domain}@${c.path}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                names.push(c.name);
-              }
+        const collect = (cookies) => {
+          for (const c of cookies) {
+            const key = `${c.name}@${c.domain}@${c.path}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              names.push(c.name);
             }
-          } catch (e) {}
+          }
+        };
+        // url 查询最贴近「请求实际会带上的 cookie」（host-only cookie 也能命中），
+        // 与 background 的收集方式保持一致；domain 查询做兜底
+        try { collect(await chrome.cookies.getAll({ url: tmpl.url })); } catch (e) {}
+        for (const d of tmpl.cookieDomains) {
+          try { collect(await chrome.cookies.getAll({ domain: d })); } catch (e) {}
+        }
+        // partitioned cookies（chatgpt 等定义了 partitionKey 的源；background
+        // 早有此查询，设置页此前缺失，导致分区 cookie 源的状态行永远 miss）
+        if (tmpl.partitionKey) {
+          for (const d of tmpl.cookieDomains) {
+            try { collect(await chrome.cookies.getAll({ domain: d, partitionKey: tmpl.partitionKey })); } catch (e) {}
+          }
         }
         Vue.set(this.loginStatusMap, inst.id, judgeLoginState(tmpl, names));
       } catch (e) {

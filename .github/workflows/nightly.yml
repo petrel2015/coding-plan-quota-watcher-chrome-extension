@@ -1,0 +1,55 @@
+# Nightly 构建：每日定时（可手动触发）跑测试 → 构建 → 打包 zip → 上传为 Artifact
+# 产物在 Actions 运行页底部下载；manifest 版本号保持仓库当前版本
+# （MV3 的 version 只允许点分整数，不能带 nightly 后缀，日期体现在文件名里）
+name: nightly-build
+
+on:
+  schedule:
+    # UTC 18:00 = 北京时间次日 02:00
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 测试（门禁）
+        run: npm test
+
+      - name: 构建并打包
+        run: npm run package
+
+      - name: 以 nightly 命名产物
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          DATE=$(date -u +%Y%m%d)
+          SHA=$(git rev-parse --short HEAD)
+          mkdir -p nightly
+          mv "releases/coding-plan-quota-watcher-${VER}.zip" \
+             "nightly/coding-plan-quota-watcher-${VER}-nightly-${DATE}-${SHA}.zip"
+          ls -la nightly/
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ format('extension-nightly-{0}', github.run_number) }}
+          path: nightly/*.zip
+          retention-days: 30
+          if-no-files-found: error

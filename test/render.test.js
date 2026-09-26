@@ -1,6 +1,7 @@
 // render.test.js - normalizeData 各数据源归一化测试
 import { describe, it, expect } from "vitest";
 import { normalizeData, applyWindowCaps, computeForecast } from "../src/shared/render.js";
+import { formatDateLabel } from "../src/shared/format.js";
 
 describe("normalizeData - volcengine-ark", () => {
   it("归一化 5h/周/月三个窗口", () => {
@@ -162,7 +163,10 @@ describe("normalizeData - zhipu-glm", () => {
     const r = normalizeData("zhipu-glm", data);
     expect(r.extras).toHaveLength(2);
     const week = r.extras.find((e) => e.label === "可用重置（周窗口）");
-    expect(week.value).toBe("2 次（最早 9月10日 23:59 到期）");
+    // 到期时间格式化走本地时区（formatDateLabel），期望值按同一管道推导，
+    // 断言与时区解耦（CI runner 是 UTC，硬编码北京时间字符串会挂）
+    const expectedExpire = formatDateLabel(new Date("2026-09-10T23:59:59+08:00"));
+    expect(week.value).toBe(`2 次（最早 ${expectedExpire} 到期）`);
     const five = r.extras.find((e) => e.label === "可用重置（5小时窗口）");
     expect(five.value).toBe("0 次");
   });
